@@ -1,0 +1,17 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../**/*.blade.php';
+@source '../**/*.tsx';
+
+@theme {
+    --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    --color-brand-700: #0f766e;
+    --color-brand-800: #115e59;
+}
+
+@layer base {
+    button, input, select, textarea {
+        font: inherit;
+    }
+}
