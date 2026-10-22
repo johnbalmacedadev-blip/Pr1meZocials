@@ -6,12 +6,12 @@ Social metrics are entered by hand. This application does not connect to Faceboo
 
 ## Requirements
 
-- PHP 8.2 or 8.3 with extensions commonly enabled by XAMPP: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `fileinfo`, and `gd` or `imagick` is not required.
+- PHP 8.5 or newer with: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `fileinfo`, and `curl`. `gd` is optional.
 - Composer 2
 - Node.js 20 or newer and npm
 - MySQL 8 or MariaDB 10.4+
 
-Laravel 13 needs PHP 8.3. This project uses Laravel 12 so it can run on the PHP 8.2 runtime shipped with XAMPP.
+This project uses Laravel 12, which supports PHP 8.5. On Windows, install PHP 8.5 (for example `winget install PHP.PHP.8.5`) and keep it ahead of any older XAMPP PHP on your PATH. MariaDB/MySQL from XAMPP can still be used for the database.
 
 ## Local setup
 
