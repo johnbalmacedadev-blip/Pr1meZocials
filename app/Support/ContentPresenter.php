@@ -64,6 +64,7 @@ class ContentPresenter
             'creator', 'owner', 'copywriter', 'videoEditor', 'reviewer', 'collaborators',
             'platformVersions.platform', 'platformVersions.performanceReports', 'platformVersions.creativeAsset',
             'assets.uploader', 'comments.user', 'activities.user', 'approvals.reviewer', 'approvals.asset', 'tags',
+            'resourceLinks:id,name,url',
         ]);
 
         return array_merge($this->summary($item), [
@@ -126,6 +127,11 @@ class ContentPresenter
                 'asset' => $approval->asset ? ['id' => $approval->asset->id, 'name' => $approval->asset->name, 'version' => $approval->asset->version] : null,
             ])->values(),
             'tags' => $item->tags->map(fn ($tag) => ['id' => $tag->id, 'name' => $tag->name])->values(),
+            'resource_links' => $item->resourceLinks->map(fn ($link) => [
+                'id' => $link->id,
+                'name' => $link->name,
+                'url' => $link->url,
+            ])->values(),
             'abilities' => [
                 'update' => $viewer->can('update', $item),
                 'assign' => $viewer->can('assign', $item),
@@ -134,7 +140,7 @@ class ContentPresenter
                 'transition' => $viewer->can('transition', $item),
                 'delete' => $viewer->can('delete', $item),
                 'upload' => $viewer->hasPermission('assets.upload') && $viewer->can('update', $item),
-                'comment' => $viewer->hasPermission('comments.create'),
+                'comment' => $viewer->hasPermission('comments.create') || $item->isAssignedTo($viewer),
                 'performance' => $viewer->hasPermission('performance.manage'),
             ],
         ]);

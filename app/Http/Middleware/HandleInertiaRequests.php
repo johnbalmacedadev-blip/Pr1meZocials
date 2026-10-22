@@ -41,6 +41,15 @@ class HandleInertiaRequests extends Middleware
                 'error' => fn () => $request->session()->get('error'),
             ],
             'unreadNotifications' => fn () => $user ? $user->userNotifications()->whereNull('read_at')->count() : 0,
+            'recentNotifications' => fn () => $user
+                ? $user->userNotifications()->latest()->limit(8)->get(['id', 'title', 'body', 'read_at', 'created_at'])->map(fn ($note) => [
+                    'id' => $note->id,
+                    'title' => $note->title,
+                    'body' => $note->body,
+                    'read_at' => $note->read_at?->toIso8601String(),
+                    'created_at' => $note->created_at?->toIso8601String(),
+                ])->values()
+                : [],
             'lookups' => fn () => $user ? Lookups::shared() : null,
             'appName' => config('app.name'),
         ];

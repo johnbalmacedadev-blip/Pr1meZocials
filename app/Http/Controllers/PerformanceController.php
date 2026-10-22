@@ -64,7 +64,7 @@ class PerformanceController extends Controller
         });
 
         $versions = ContentPlatformVersion::query()
-            ->whereHas('contentItem', fn ($query) => $query->visibleTo($request->user())->whereHas('status', fn ($status) => $status->whereIn('slug', ['approved', 'scheduled', 'published'])))
+            ->whereHas('contentItem', fn ($query) => $query->visibleTo($request->user())->whereHas('status', fn ($status) => $status->whereIn('slug', ['approved', 'published'])))
             ->with(['platform:id,name', 'contentItem:id,title,reference_number'])
             ->latest()
             ->limit(200)

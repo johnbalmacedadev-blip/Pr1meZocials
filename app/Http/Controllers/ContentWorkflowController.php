@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\TaskNoteController;
 use App\Models\ContentItem;
 use App\Models\User;
 use App\Services\AssignmentService;
@@ -51,6 +52,8 @@ class ContentWorkflowController extends Controller
             'filters' => $filters,
             'selected' => $selected,
             'truncated' => $items->count() === 200,
+            'notes' => TaskNoteController::pendingFor($request->user(), $request->user()),
+            'recipients' => TaskNoteController::recipientsFor($request->user()),
         ]);
     }
 
@@ -74,16 +77,13 @@ class ContentWorkflowController extends Controller
 
         $data = $request->validate([
             'owner_id' => ['nullable', 'integer', 'exists:users,id'],
-            'copywriter_id' => ['nullable', 'integer', 'exists:users,id'],
-            'video_editor_id' => ['nullable', 'integer', 'exists:users,id'],
-            'reviewer_id' => ['nullable', 'integer', 'exists:users,id'],
             'collaborator_ids' => ['nullable', 'array'],
             'collaborator_ids.*' => ['integer', 'exists:users,id'],
         ]);
 
         $assignments->sync($content, $data, $request->user());
 
-        return back()->with('success', 'Assignments saved. The primary owner is shown on the content record.');
+        return back()->with('success', 'Assignment saved.');
     }
 
     public function review(Request $request, ContentItem $content, ContentWorkflow $workflow): RedirectResponse
@@ -107,7 +107,7 @@ class ContentWorkflowController extends Controller
 
             $workflow->transition(
                 $content->fresh('status'),
-                $data['decision'] === 'approved' ? 'approved' : 'revision_required',
+                $data['decision'] === 'approved' ? 'approved' : 'in_progress',
                 $request->user(),
                 $data['notes'] ?? null,
                 false,
@@ -126,7 +126,10 @@ class ContentWorkflowController extends Controller
     public function comment(Request $request, ContentItem $content): RedirectResponse
     {
         $this->authorize('view', $content);
-        abort_unless($request->user()->hasPermission('comments.create'), 403);
+        abort_unless(
+            $request->user()->hasPermission('comments.create') || $content->isAssignedTo($request->user()),
+            403,
+        );
 
         $data = $request->validate([
             'body' => ['required', 'string', 'max:5000'],

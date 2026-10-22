@@ -78,7 +78,7 @@ class PublishingService
             $item = $version->contentItem;
             $deadline = $item->deadline?->toDateString();
 
-            if (! in_array($item->status->slug, ['approved', 'scheduled', 'published'], true)) {
+            if (! in_array($item->status->slug, ['approved', 'published'], true)) {
                 throw ValidationException::withMessages([
                     'published_url' => 'Approve the content before recording it as published. Approval and publication are separate steps.',
                 ]);
@@ -103,19 +103,7 @@ class PublishingService
             }
 
             if ($markContentPublished && $item->status->slug !== 'published') {
-                if ($item->status->slug === 'approved') {
-                    $hasSchedule = $item->platformVersions()->whereNotNull('scheduled_at')->exists();
-
-                    if (! $hasSchedule) {
-                        $version->scheduled_at ??= $when;
-                        $version->save();
-                    }
-
-                    $this->workflow->transition($item->fresh('status'), 'scheduled', $actor, 'Scheduled while recording publication.');
-                    $item = $item->fresh('status');
-                }
-
-                $this->workflow->transition($item, 'published', $actor, $notes);
+                $this->workflow->transition($item->fresh('status'), 'published', $actor, $notes);
             }
 
             $item->refresh();

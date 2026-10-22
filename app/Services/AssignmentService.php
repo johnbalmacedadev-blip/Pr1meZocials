@@ -27,20 +27,19 @@ class AssignmentService
                 'reviewer_id' => $item->reviewer_id,
             ];
 
-            foreach (array_keys($previous) as $field) {
-                if (! array_key_exists($field, $data)) {
-                    continue;
-                }
-
-                $userId = $data[$field] ? (int) $data[$field] : null;
+            if (array_key_exists('owner_id', $data)) {
+                $userId = $data['owner_id'] ? (int) $data['owner_id'] : null;
 
                 if ($userId) {
-                    $this->assertMember($item, $userId);
+                    $this->assertMember($item, $userId, 'owner_id');
                 }
 
-                $item->{$field} = $userId;
+                $item->owner_id = $userId;
             }
 
+            $item->copywriter_id = null;
+            $item->video_editor_id = null;
+            $item->reviewer_id = null;
             $item->save();
 
             if (array_key_exists('collaborator_ids', $data)) {
@@ -51,7 +50,7 @@ class AssignmentService
                     ->values();
 
                 foreach ($ids as $id) {
-                    $this->assertMember($item, $id);
+                    $this->assertMember($item, $id, 'collaborator_ids');
                 }
 
                 $item->collaborators()->sync(
@@ -62,10 +61,7 @@ class AssignmentService
             $item->load(['owner', 'copywriter', 'videoEditor', 'reviewer', 'collaborators']);
 
             $roles = [
-                'owner_id' => ['owner', 'Primary owner assigned'],
-                'copywriter_id' => ['copywriter', 'Copywriter assigned'],
-                'video_editor_id' => ['video_editor', 'Video editor assigned'],
-                'reviewer_id' => ['reviewer', 'Reviewer assigned'],
+                'owner_id' => ['owner', 'Task assigned'],
             ];
 
             foreach ($roles as $field => [$role, $title]) {
@@ -109,14 +105,18 @@ class AssignmentService
         };
     }
 
-    private function assertMember(ContentItem $item, int $userId): void
+    private function assertMember(ContentItem $item, int $userId, string $field): void
     {
         $user = User::query()->find($userId);
 
-        if (! $user || ! $user->is_active || ! $user->canAccessBrand($item->brand_id)) {
+        if (! $user || ! $user->is_active) {
             throw ValidationException::withMessages([
-                'owner_id' => 'Assignees must be active members of this brand.',
+                $field => 'Choose an active teammate.',
             ]);
+        }
+
+        if (! $user->canAccessBrand($item->brand_id)) {
+            $user->brands()->syncWithoutDetaching([$item->brand_id]);
         }
     }
 }

@@ -6,8 +6,9 @@
 
 @theme {
     --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
-    --color-brand-700: #0f766e;
-    --color-brand-800: #115e59;
+    --color-brand-50: #eef2fb;
+    --color-brand-700: #284cb8;
+    --color-brand-800: #1f3d96;
 }
 
 @layer base {

@@ -17,7 +17,7 @@ const boot = {
         createRoot(el).render(<App {...props} />);
     },
     progress: {
-        color: '#0f766e',
+        color: '#284cb8',
     },
 };
 

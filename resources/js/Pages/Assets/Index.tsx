@@ -41,7 +41,7 @@ export default function Assets({ assets, filters }: { assets: { data: AssetRow[]
                             <p className="text-sm text-zinc-500">{asset.kind_label} · v{asset.version} · {formatBytes(asset.size)}</p>
                             <p className="text-sm text-zinc-500">{asset.brand?.name} · {asset.uploader?.name} · {formatDate(asset.created_at)}</p>
                             <div className="mt-2 flex gap-3 text-sm">
-                                <a className="font-medium text-teal-800" href={`/assets/${asset.id}/download`}>Download</a>
+                                <a className="font-medium text-brand-700" href={`/assets/${asset.id}/download`}>Download</a>
                                 {asset.content_id && <Link className="text-zinc-700" href={`/content/${asset.content_id}`}>{asset.content_title}</Link>}
                             </div>
                         </article>

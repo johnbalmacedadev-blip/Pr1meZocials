@@ -13,7 +13,7 @@ export default function Notifications({ notifications }: { notifications: { data
             <div className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
                 {notifications.data.length === 0 && <p className="p-6 text-sm text-zinc-500">You are caught up.</p>}
                 {notifications.data.map((note) => (
-                    <button key={note.id} className={`block w-full px-4 py-3 text-left ${note.read_at ? 'bg-white' : 'bg-teal-50'}`} onClick={() => router.post(`/notifications/${note.id}/read`)}>
+                    <button key={note.id} className={`block w-full px-4 py-3 text-left ${note.read_at ? 'bg-white' : 'bg-brand-50'}`} onClick={() => router.post(`/notifications/${note.id}/read`)}>
                         <p className="font-medium">{note.title}</p>
                         <p className="text-sm text-zinc-600">{note.body}</p>
                         <p className="text-xs text-zinc-500">{formatDate(note.created_at)}</p>

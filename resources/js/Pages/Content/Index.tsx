@@ -9,8 +9,8 @@ const presets = [
     ['All content', {}],
     ['My tasks', { owner: 'me' }],
     ['New ideas', { status: 'inbox' }],
-    ['Awaiting review', { status: 'internal_review' }],
-    ['Revision required', { status: 'revision_required' }],
+    ['For review', { status: 'internal_review' }],
+    ['Ready for production', { status: 'ready_for_production' }],
     ['Overdue', { overdue: '1' }],
     ['Recently published', { status: 'published' }],
     ['Archived', { status: 'archived' }],
@@ -30,7 +30,7 @@ export default function Index({ content, filters, options, savedViews }: { conte
     return (
         <AppLayout>
             <Head title="Content ideas" />
-            <PageHeader title="Content ideas" description="Every idea keeps its owner, brief, platforms, and history in one record." actions={permissions.includes('content.create') ? <Link href="/content/create" className="inline-flex h-10 items-center rounded-lg bg-teal-800 px-3 text-sm font-medium text-white">New idea</Link> : undefined} />
+            <PageHeader title="Content ideas" description="Every idea keeps its owner, brief, platforms, and history in one record." actions={permissions.includes('content.create') ? <Link href="/content/create" className="inline-flex h-10 items-center rounded-lg bg-brand-700 px-3 text-sm font-medium text-white">New idea</Link> : undefined} />
             <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
                 {presets.map(([label, query]) => (
                     <Link key={label} href={`/content?${new URLSearchParams(query).toString()}`} className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm hover:border-zinc-400">{label}</Link>
@@ -63,7 +63,7 @@ export default function Index({ content, filters, options, savedViews }: { conte
                 ))}
             </form>
             {content.data.length === 0 ? (
-                <EmptyState title="No ideas match these filters" body="Clear a filter or capture a new idea. Quick capture only needs a title, brand, and format." action={permissions.includes('content.create') ? <Link href="/content/create" className="text-sm font-medium text-teal-800">Capture an idea</Link> : undefined} />
+                <EmptyState title="No ideas match these filters" body="Clear a filter or capture a new idea. Quick capture only needs a title, brand, and format." action={permissions.includes('content.create') ? <Link href="/content/create" className="text-sm font-medium text-brand-700">Capture an idea</Link> : undefined} />
             ) : (
                 <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
                     <div className="divide-y divide-zinc-100">

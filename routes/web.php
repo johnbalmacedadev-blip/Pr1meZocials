@@ -7,14 +7,18 @@ use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\ContentItemController;
 use App\Http\Controllers\ContentWorkflowController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\InspirationController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\PlatformVersionController;
+use App\Http\Controllers\PostingScheduleController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ResourceLinkController;
 use App\Http\Controllers\SavedViewController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\TaskNoteController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -58,8 +62,27 @@ Route::middleware('auth')->group(function () {
     Route::get('/assets/{asset}/preview', [AssetController::class, 'preview'])->name('assets.preview');
     Route::delete('/assets/{asset}', [AssetController::class, 'destroy'])->name('assets.destroy');
 
+    Route::get('/resources', [ResourceLinkController::class, 'index'])->name('resources.index');
+    Route::get('/resources/{resourceLink}/files', [ResourceLinkController::class, 'files'])->name('resources.files');
+    Route::get('/resources/{resourceLink}/files/{file}/preview', [ResourceLinkController::class, 'preview'])->where('file', '[A-Za-z0-9_-]+')->name('resources.files.preview');
+    Route::get('/resources/{resourceLink}/files/{file}/download', [ResourceLinkController::class, 'download'])->where('file', '[A-Za-z0-9_-]+')->name('resources.files.download');
+    Route::post('/resources', [ResourceLinkController::class, 'store'])->name('resources.store');
+    Route::put('/resources/{resourceLink}', [ResourceLinkController::class, 'update'])->name('resources.update');
+    Route::delete('/resources/{resourceLink}', [ResourceLinkController::class, 'destroy'])->name('resources.destroy');
+
+    Route::get('/inspiration', [InspirationController::class, 'index'])->name('inspiration.index');
+    Route::post('/inspiration', [InspirationController::class, 'store'])->name('inspiration.store');
+    Route::put('/inspiration/{inspiration}', [InspirationController::class, 'update'])->name('inspiration.update');
+    Route::post('/inspiration/{inspiration}/archive', [InspirationController::class, 'archive'])->name('inspiration.archive');
+    Route::delete('/inspiration/{inspiration}', [InspirationController::class, 'destroy'])->name('inspiration.destroy');
+
     Route::get('/board', [ContentWorkflowController::class, 'board'])->name('board');
+    Route::post('/task-notes', [TaskNoteController::class, 'store'])->name('task-notes.store');
+    Route::post('/task-notes/{taskNote}/complete', [TaskNoteController::class, 'complete'])->name('task-notes.complete');
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar');
+    Route::get('/posting-schedule', [PostingScheduleController::class, 'index'])->name('posting-schedule');
+    Route::post('/posting-schedule', [PostingScheduleController::class, 'store'])->name('posting-schedule.store');
+    Route::delete('/posting-schedule/{entry}', [PostingScheduleController::class, 'destroy'])->name('posting-schedule.destroy');
 
     Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
     Route::get('/campaigns/create', [CampaignController::class, 'create'])->name('campaigns.create');
@@ -70,6 +93,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/campaigns/{campaign}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
 
     Route::get('/team', [TeamController::class, 'index'])->name('team.index');
+    Route::post('/team', [TeamController::class, 'store'])->name('team.store');
+    Route::put('/team/{user}', [TeamController::class, 'update'])->name('team.update');
+    Route::delete('/team/{user}', [TeamController::class, 'destroy'])->name('team.destroy');
     Route::get('/team/{user}', [TeamController::class, 'show'])->name('team.show');
 
     Route::get('/performance', [PerformanceController::class, 'index'])->name('performance.index');

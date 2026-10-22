@@ -43,9 +43,8 @@ export default function Edit({ contentItem, options }: { contentItem: ContentFor
         complexity: contentItem.complexity ? String(contentItem.complexity) : '',
         tag_ids: (contentItem as { tags?: { id: number }[] }).tags?.map((tag) => tag.id) ?? [],
         owner_id: String((contentItem as { owner?: { id: number } }).owner?.id ?? ''),
-        copywriter_id: String((contentItem as { copywriter?: { id: number } }).copywriter?.id ?? ''),
-        video_editor_id: String((contentItem as { video_editor?: { id: number } }).video_editor?.id ?? ''),
-        reviewer_id: String((contentItem as { reviewer?: { id: number } }).reviewer?.id ?? ''),
+        collaborator_ids: (contentItem as { collaborators?: { id: number }[] }).collaborators?.map((person) => person.id) ?? [],
+        resource_link_ids: (contentItem as { resource_links?: { id: number }[] }).resource_links?.map((item) => item.id) ?? [],
     };
 
     return (

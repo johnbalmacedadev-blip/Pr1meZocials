@@ -110,10 +110,10 @@ class DashboardMetrics
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'kpis' => [
                 'active' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', '!=', 'archived'))),
-                'awaiting_development' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->whereIn('slug', ['inbox', 'ideation', 'ready_for_brief']))),
-                'in_production' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->whereIn('slug', ['ready_for_production', 'in_progress']))),
+                'awaiting_development' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', 'inbox'))),
+                'ready_for_production' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', 'ready_for_production'))),
+                'in_production' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', 'in_progress'))),
                 'awaiting_review' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', 'internal_review'))),
-                'revision_required' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', 'revision_required'))),
                 'overdue' => $count(fn (Builder $query) => $query->whereDate('deadline', '<', now()->toDateString())->whereHas('status', fn (Builder $status) => $status->whereNotIn('slug', $closed))),
                 'approved_ready' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', 'approved'))),
                 'scheduled_this_week' => $scheduledIds->count(),
@@ -153,9 +153,54 @@ class DashboardMetrics
                 'owner' => $item->owner?->only(['id', 'name']),
                 'brand' => $item->brand?->only(['id', 'name']),
             ])->values(),
+            'tasks' => $this->tasks($user, $filters),
             'performance' => $this->performance($user, $filters, $from, $to),
             'has_content' => $this->scoped($user, $filters)->exists(),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return list<array<string, mixed>>
+     */
+    private function tasks(User $user, array $filters): array
+    {
+        return $this->applyFilters(ContentItem::query()->visibleTo($user), collect($filters)->except('user_id')->all())
+            ->where(function (Builder $query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhere('copywriter_id', $user->id)
+                    ->orWhere('video_editor_id', $user->id)
+                    ->orWhere('reviewer_id', $user->id)
+                    ->orWhereHas('collaborators', fn (Builder $collaborators) => $collaborators->where('users.id', $user->id));
+            })
+            ->whereHas('status', fn (Builder $status) => $status->whereIn('slug', ['inbox', 'ready_for_production']))
+            ->with(['status:id,name,slug,color', 'brand:id,name', 'collaborators:id'])
+            ->latest('updated_at')
+            ->limit(5)
+            ->get()
+            ->map(function (ContentItem $item) use ($user) {
+                $assigned = in_array($user->id, [
+                    $item->owner_id,
+                    $item->copywriter_id,
+                    $item->video_editor_id,
+                    $item->reviewer_id,
+                ], true);
+                $roles = array_values(array_filter([
+                    $assigned ? 'Assigned' : null,
+                    $item->collaborators->contains('id', $user->id) ? 'Collaborator' : null,
+                ]));
+
+                return [
+                    'id' => $item->id,
+                    'title' => $item->title,
+                    'reference_number' => $item->reference_number,
+                    'deadline' => $item->deadline?->toDateString(),
+                    'role' => implode(', ', $roles),
+                    'status' => $item->status?->only(['name', 'slug', 'color']),
+                    'brand' => $item->brand?->only(['id', 'name']),
+                ];
+            })
+            ->all();
     }
 
     /**

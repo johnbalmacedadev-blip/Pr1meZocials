@@ -123,7 +123,7 @@ function UserEditor({ person, roles, brands }: { person: Person; roles: Role[]; 
 
     return (
         <details className="mt-2">
-            <summary className="cursor-pointer text-teal-800">Edit access</summary>
+            <summary className="cursor-pointer text-brand-700">Edit access</summary>
             <form className="mt-2 grid gap-2" onSubmit={(event) => { event.preventDefault(); form.put(`/settings/users/${person.id}`); }}>
                 <Input value={form.data.name} onChange={(event) => form.setData('name', event.target.value)} />
                 <Input type="email" value={form.data.email} onChange={(event) => form.setData('email', event.target.value)} />

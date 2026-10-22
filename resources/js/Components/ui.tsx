@@ -8,11 +8,11 @@ import { cn } from '@/lib/utils';
 import { priorityTone, tone } from '@/types';
 
 const buttonStyles = cva(
-    'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700',
+    'inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition disabled:pointer-events-none disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-700',
     {
         variants: {
             variant: {
-                primary: 'bg-teal-800 text-white hover:bg-teal-900',
+                primary: 'bg-brand-700 text-white hover:bg-brand-800',
                 secondary: 'border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50',
                 danger: 'bg-rose-700 text-white hover:bg-rose-800',
                 ghost: 'text-zinc-700 hover:bg-zinc-100',
@@ -37,7 +37,7 @@ export function Button({
     return <Comp className={cn(buttonStyles({ variant, size }), className)} {...props} />;
 }
 
-export const fieldClass = 'w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none placeholder:text-zinc-400 focus:border-teal-700 focus:ring-2 focus:ring-teal-700/15';
+export const fieldClass = 'w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none placeholder:text-zinc-400 focus:border-brand-700 focus:ring-2 focus:ring-brand-700/15';
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
     return <input {...props} className={cn(fieldClass, props.className)} />;
@@ -115,12 +115,12 @@ export function Pagination({ prev, next, from, to, total }: { prev: string | nul
     );
 }
 
-export function Modal({ open, onOpenChange, title, children }: { open: boolean; onOpenChange: (open: boolean) => void; title: string; children: ReactNode }) {
+export function Modal({ open, onOpenChange, title, children, contentClassName }: { open: boolean; onOpenChange: (open: boolean) => void; title: string; children: ReactNode; contentClassName?: string }) {
     return (
         <Dialog.Root open={open} onOpenChange={onOpenChange}>
             <Dialog.Portal>
                 <Dialog.Overlay className="fixed inset-0 z-40 bg-zinc-950/40" />
-                <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(100%-2rem,36rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white p-5 shadow-xl">
+                <Dialog.Content className={cn('fixed left-1/2 top-1/2 z-50 w-[min(100%-2rem,36rem)] -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white p-5 shadow-xl', contentClassName)}>
                     <div className="mb-4 flex items-start justify-between gap-4">
                         <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
                         <Dialog.Close className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100" aria-label="Close">

@@ -18,5 +18,7 @@ class DatabaseSeeder extends Seeder
         if (filter_var(env('SEED_DEMO', true), FILTER_VALIDATE_BOOL)) {
             $this->call(DemoSeeder::class);
         }
+
+        $this->call(AccountSeeder::class);
     }
 }

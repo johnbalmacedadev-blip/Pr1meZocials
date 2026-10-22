@@ -50,6 +50,7 @@ interface Detail {
     internal_notes: string | null;
     complexity: number | null;
     tags: { id: number; name: string }[];
+    resource_links: { id: number; name: string; url: string }[];
     versions: Version[];
     assets: Asset[];
     comments: { id: number; body: string; created_at: string; user: { name: string } | null }[];
@@ -105,30 +106,35 @@ export default function Show({ contentItem, options }: { contentItem: Detail; op
             <PageHeader
                 title={item.title}
                 description={`${item.reference_number} · ${item.brand?.name ?? 'No brand'} · ${item.format_label}`}
-                actions={item.abilities.update ? <Link href={`/content/${item.id}/edit`} className="inline-flex h-10 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm">Edit brief</Link> : undefined}
+                actions={(item.abilities.update || item.abilities.delete) ? (
+                    <>
+                        {item.abilities.update && <Link href={`/content/${item.id}/edit`} className="inline-flex h-10 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm">Edit brief</Link>}
+                        {item.abilities.delete && <Button type="button" variant="danger" onClick={() => { if (confirm(`Move "${item.title}" to trash?`)) router.delete(`/content/${item.id}`); }}>Delete</Button>}
+                    </>
+                ) : undefined}
             />
             <div className="mb-4 flex flex-wrap items-center gap-2">
                 <StatusBadge status={item.status} />
                 <PriorityBadge priority={item.priority} />
                 {item.is_overdue && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-900">Overdue</span>}
-                <span className="text-sm text-zinc-500">Primary owner: {item.owner?.name ?? 'Unassigned'}</span>
+                <span className="text-sm text-zinc-500">Assigned to: {item.owner?.name ?? 'Unassigned'}</span>
                 <span className="text-sm text-zinc-500">Production deadline: {formatDate(item.deadline)}</span>
             </div>
             {error && <p className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-900">{error}</p>}
             {item.abilities.transition && (
-                <form className="mb-4 flex flex-wrap items-end gap-2" onSubmit={(event) => {
+                <form className="mb-4 grid gap-4 md:grid-cols-[14rem_minmax(16rem,28rem)_max-content] md:items-start" onSubmit={(event) => {
                     event.preventDefault();
                     const data = new FormData(event.currentTarget);
                     router.post(`/content/${item.id}/transition`, { status: data.get('status'), notes: data.get('notes') }, { preserveScroll: true, onError: (errors) => setError(errors.status || errors.notes || 'The status could not be changed.'), onSuccess: () => setError('') });
                 }}>
                     <Field label="Move to">
-                        <Select name="status" defaultValue="">
+                        <Select className="h-10" name="status" defaultValue="">
                             <option value="" disabled>Choose a stage</option>
                             {nextStatuses.map((status) => <option key={status.slug} value={status.slug}>{status.name}</option>)}
                         </Select>
                     </Field>
-                    <Field label="Note" hint="Required when requesting revisions."><Input name="notes" /></Field>
-                    <Button type="submit" variant="secondary">Update status</Button>
+                    <Field label="Note" hint="Required when requesting revisions."><Input className="h-10" name="notes" /></Field>
+                    <Button type="submit" variant="secondary" className="h-10 w-auto justify-self-start md:mt-6">Update status</Button>
                 </form>
             )}
             <div className="mb-4 flex gap-2 overflow-x-auto">
@@ -148,9 +154,6 @@ export default function Show({ contentItem, options }: { contentItem: Detail; op
 function Brief({ item, options }: { item: Detail; options: FormOptions }) {
     const assign = useForm({
         owner_id: item.owner?.id ? String(item.owner.id) : '',
-        copywriter_id: item.copywriter?.id ? String(item.copywriter.id) : '',
-        video_editor_id: item.video_editor?.id ? String(item.video_editor.id) : '',
-        reviewer_id: item.reviewer?.id ? String(item.reviewer.id) : '',
         collaborator_ids: item.collaborators.map((person) => person.id),
     });
     const facts: [string, string | null | undefined][] = [
@@ -160,9 +163,8 @@ function Brief({ item, options }: { item: Detail; options: FormOptions }) {
         ['Funnel', item.funnel_stage],
         ['Distribution', item.distribution],
         ['Audience', item.audience_segment?.name],
-        ['Copywriter', item.copywriter?.name],
-        ['Video editor', item.video_editor?.name],
-        ['Reviewer', item.reviewer?.name],
+        ['Assigned to', item.owner?.name],
+        ['Collaborators', item.collaborators.map((person) => person.name).join(', ') || null],
         ['Created by', item.creator?.name],
         ['Target production', formatDate(item.target_production_date)],
         ['Complexity', item.complexity ? String(item.complexity) : null],
@@ -189,13 +191,24 @@ function Brief({ item, options }: { item: Detail; options: FormOptions }) {
     ];
 
     return (
+        <div className="space-y-4">
         <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <section className="space-y-4 rounded-xl border border-zinc-200 bg-white p-5">
                 {brief.filter(([, value]) => value).map(([label, value]) => (
                     <div key={label}><h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</h3><p className="mt-1 whitespace-pre-wrap text-sm">{value}</p></div>
                 ))}
                 {brief.every(([, value]) => !value) && <p className="text-sm text-zinc-500">The brief is still empty. Open Edit to add it without starting over.</p>}
-                {item.inspiration_url && <a className="text-sm font-medium text-teal-800" href={item.inspiration_url} target="_blank" rel="noreferrer">Inspiration: {item.inspiration_source || item.inspiration_url}</a>}
+                {item.inspiration_url && <a className="text-sm font-medium text-brand-700" href={item.inspiration_url} target="_blank" rel="noreferrer">Inspiration: {item.inspiration_source || item.inspiration_url}</a>}
+                {item.resource_links.length > 0 && (
+                    <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Creative assets</h3>
+                        <div className="mt-2 space-y-1">
+                            {item.resource_links.map((link) => (
+                                <a key={link.id} className="block text-sm font-medium text-brand-700" href={link.url} target="_blank" rel="noreferrer">{link.name}</a>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 <div className="flex flex-wrap gap-2">{item.tags.map((tag) => <span key={tag.id} className="rounded-full bg-zinc-100 px-2 py-1 text-xs">{tag.name}</span>)}</div>
             </section>
             <aside className="space-y-4">
@@ -205,16 +218,14 @@ function Brief({ item, options }: { item: Detail; options: FormOptions }) {
                 {item.abilities.assign && (
                     <form className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4" onSubmit={(event) => { event.preventDefault(); assign.put(`/content/${item.id}/assignment`); }}>
                         <h3 className="font-semibold">Assignment</h3>
-                        <p className="text-xs text-zinc-500">One primary owner stays visible on every active task.</p>
-                        {(['owner_id', 'copywriter_id', 'video_editor_id', 'reviewer_id'] as const).map((key) => (
-                            <Field key={key} label={key.replace('_id', '').replace('_', ' ')}>
-                                <Select value={assign.data[key]} onChange={(event) => assign.setData(key, event.target.value)}>
-                                    <option value="">Unassigned</option>
-                                    {options.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-                                </Select>
-                            </Field>
-                        ))}
-                        <Field label="Collaborators">
+                        <p className="text-xs text-zinc-500">The person you assign sees this task on their dashboard and production board. They can edit the details only when they are also checked as a collaborator.</p>
+                        <Field label="Assign task to" error={assign.errors.owner_id}>
+                            <Select value={assign.data.owner_id} onChange={(event) => assign.setData('owner_id', event.target.value)}>
+                                <option value="">Unassigned</option>
+                                {options.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+                            </Select>
+                        </Field>
+                        <Field label="Collaborators" hint="Collaborators can edit the task details." error={assign.errors.collaborator_ids}>
                             <div className="max-h-36 space-y-1 overflow-auto">
                                 {options.people.map((person) => (
                                     <label key={person.id} className="flex items-center gap-2 text-sm">
@@ -229,6 +240,50 @@ function Brief({ item, options }: { item: Detail; options: FormOptions }) {
                 )}
             </aside>
         </div>
+        <Notes item={item} />
+        </div>
+    );
+}
+
+function Notes({ item }: { item: Detail }) {
+    const comment = useForm({ body: '', mention_ids: [] as number[] });
+
+    return (
+        <section className="rounded-xl border border-zinc-200 bg-white p-5">
+            <h3 className="font-semibold">Notes</h3>
+            <p className="mt-1 text-sm text-zinc-500">Add a link or a note when the task is finished. The person this task is assigned to can write here.</p>
+            <div className="mt-4 space-y-3">
+                {item.comments.length === 0 && <p className="text-sm text-zinc-500">No notes yet.</p>}
+                {item.comments.map((entry) => (
+                    <article key={entry.id} className="rounded-lg border border-zinc-100 bg-zinc-50 p-3">
+                        <p className="text-sm font-medium">{entry.user?.name}</p>
+                        <CommentBody body={entry.body} />
+                        <p className="text-xs text-zinc-500">{formatDate(entry.created_at)}</p>
+                    </article>
+                ))}
+            </div>
+            {item.abilities.comment && (
+                <form className="mt-4 space-y-2" onSubmit={(event) => { event.preventDefault(); comment.post(`/content/${item.id}/comments`, { preserveScroll: true, onSuccess: () => comment.reset('body') }); }}>
+                    <Textarea value={comment.data.body} onChange={(event) => comment.setData('body', event.target.value)} placeholder="Paste a finished video link, or leave a note for the team" rows={4} />
+                    {comment.errors.body && <p className="text-sm text-rose-700">{comment.errors.body}</p>}
+                    <Button type="submit" disabled={comment.processing || comment.data.body.trim() === ''}>Add note</Button>
+                </form>
+            )}
+        </section>
+    );
+}
+
+function CommentBody({ body }: { body: string }) {
+    const parts = body.split(/(https?:\/\/[^\s]+)/g);
+
+    return (
+        <p className="mt-1 whitespace-pre-wrap text-sm">
+            {parts.map((part, index) => (
+                /^https?:\/\//.test(part)
+                    ? <a key={index} className="font-medium text-brand-700 underline" href={part} target="_blank" rel="noreferrer">{part}</a>
+                    : <span key={index}>{part}</span>
+            ))}
+        </p>
     );
 }
 
@@ -249,7 +304,7 @@ function Platforms({ item }: { item: Detail }) {
                     </div>
                     {version.caption && <p className="mt-2 whitespace-pre-wrap text-sm">{version.caption}</p>}
                     <p className="mt-2 text-sm text-zinc-500">Publishes {version.scheduled_at ? formatDate(version.scheduled_at) : 'unscheduled'} · Production deadline {formatDate(item.deadline)}</p>
-                    {version.published_url && <a className="mt-1 block text-sm text-teal-800" href={version.published_url} target="_blank" rel="noreferrer">{version.published_url}</a>}
+                    {version.published_url && <a className="mt-1 block text-sm text-brand-700" href={version.published_url} target="_blank" rel="noreferrer">{version.published_url}</a>}
                     {version.metrics && <p className="mt-2 text-sm">Engagement rate {version.metrics.engagement_rate ?? '—'}% · CTR {version.metrics.click_through_rate ?? '—'}%</p>}
                     {item.abilities.publish && version.publishing_status !== 'published' && (
                         <form className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]" onSubmit={(event) => { event.preventDefault(); router.post(`/versions/${version.id}/publish`, { published_url: publish.data.published_url, published_at: publish.data.published_at, notes: publish.data.notes, mark_content_published: true }, { preserveScroll: true }); }}>
@@ -292,7 +347,7 @@ function Assets({ item }: { item: Detail }) {
                         {asset.previewable && asset.mime_type.startsWith('video/') && <video src={`/assets/${asset.id}/preview`} controls className="mb-3 max-h-48 w-full rounded-lg" />}
                         <h3 className="font-medium">{asset.name}</h3>
                         <p className="text-sm text-zinc-500">{asset.kind_label} · v{asset.version} · {formatBytes(asset.size)} · {asset.uploader?.name}</p>
-                        <a className="mt-2 inline-block text-sm font-medium text-teal-800" href={`/assets/${asset.id}/download`}>Download</a>
+                        <a className="mt-2 inline-block text-sm font-medium text-brand-700" href={`/assets/${asset.id}/download`}>Download</a>
                     </article>
                 ))}
             </div>
@@ -360,7 +415,7 @@ function Activity({ item }: { item: Detail }) {
                 <div className="mt-3 space-y-3">
                     {item.comments.length === 0 && <p className="text-sm text-zinc-500">No comments yet.</p>}
                     {item.comments.map((entry) => (
-                        <article key={entry.id}><p className="text-sm font-medium">{entry.user?.name}</p><p className="whitespace-pre-wrap text-sm">{entry.body}</p><p className="text-xs text-zinc-500">{formatDate(entry.created_at)}</p></article>
+                        <article key={entry.id}><p className="text-sm font-medium">{entry.user?.name}</p><CommentBody body={entry.body} /><p className="text-xs text-zinc-500">{formatDate(entry.created_at)}</p></article>
                     ))}
                 </div>
                 {item.abilities.comment && (

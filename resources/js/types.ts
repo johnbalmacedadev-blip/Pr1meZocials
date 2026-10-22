@@ -46,6 +46,7 @@ export interface SharedProps {
     };
     flash: { success: string | null; error: string | null };
     unreadNotifications: number;
+    recentNotifications: { id: number; title: string; body: string; read_at: string | null; created_at: string | null }[];
     lookups: {
         statuses: WorkflowStatus[];
         formats: LookupOption[];
@@ -110,7 +111,9 @@ export interface FormOptions {
     objectives: { id: number; name: string }[];
     segments: { id: number; name: string; brand_id: number | null }[];
     tags: { id: number; name: string; brand_id: number | null }[];
+    resource_links: { id: number; name: string; url: string; brand_id: number }[];
     people: Person[];
+    inspirations: { id: number; name: string | null; url: string; platform: { name: string; slug: string } | null }[];
 }
 
 export const tone: Record<string, string> = {

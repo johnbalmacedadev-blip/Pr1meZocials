@@ -66,6 +66,8 @@ class StoreContentRequest extends FormRequest
             'reviewer_id' => ['nullable', 'integer', 'exists:users,id'],
             'collaborator_ids' => ['nullable', 'array'],
             'collaborator_ids.*' => ['integer', 'exists:users,id'],
+            'resource_link_ids' => ['nullable', 'array'],
+            'resource_link_ids.*' => ['integer', 'exists:resource_links,id'],
         ];
     }
 

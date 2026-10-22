@@ -56,7 +56,7 @@ class ContentItemController extends Controller
 
         if ($request->user()->can('assign', $item)) {
             $assignments->sync($item, $request->safe()->only([
-                'owner_id', 'copywriter_id', 'video_editor_id', 'reviewer_id', 'collaborator_ids',
+                'owner_id', 'collaborator_ids',
             ]), $request->user());
         }
 
@@ -83,13 +83,19 @@ class ContentItemController extends Controller
         ]);
     }
 
-    public function update(UpdateContentRequest $request, ContentItem $content, ContentWriter $writer): RedirectResponse
+    public function update(UpdateContentRequest $request, ContentItem $content, ContentWriter $writer, AssignmentService $assignments): RedirectResponse
     {
         if ($request->filled('brand_id')) {
             abort_unless($request->user()->canAccessBrand((int) $request->integer('brand_id')), 403);
         }
 
         $writer->update($content, $request->validated(), $request->user());
+
+        if ($request->user()->can('assign', $content)) {
+            $assignments->sync($content, $request->safe()->only([
+                'owner_id', 'collaborator_ids',
+            ]), $request->user());
+        }
 
         return redirect()->route('content.show', $content)->with('success', 'Content brief saved.');
     }

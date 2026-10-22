@@ -135,6 +135,11 @@ class ContentItem extends Model
         return $this->belongsTo(User::class, 'reviewer_id');
     }
 
+    public function resourceLinks(): BelongsToMany
+    {
+        return $this->belongsToMany(ResourceLink::class, 'content_resource_link');
+    }
+
     public function collaborators(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'content_collaborators')
@@ -197,11 +202,19 @@ class ContentItem extends Model
             if ($user->hasPermission('content.approve')) {
                 $inner->orWhereHas('status', fn (Builder $status) => $status->whereIn('slug', [
                     'internal_review',
-                    'revision_required',
                     'approved',
                 ]));
             }
         });
+    }
+
+    public function isCollaborator(User $user): bool
+    {
+        if ($this->relationLoaded('collaborators')) {
+            return $this->collaborators->contains('id', $user->id);
+        }
+
+        return $this->collaborators()->where('users.id', $user->id)->exists();
     }
 
     public function isAssignedTo(User $user): bool

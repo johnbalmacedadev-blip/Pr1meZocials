@@ -37,7 +37,7 @@ class ContentItemPolicy
         $item->loadMissing('status');
 
         return $user->hasPermission('content.approve')
-            && in_array($item->status?->slug, ['internal_review', 'revision_required', 'approved'], true);
+            && in_array($item->status?->slug, ['internal_review', 'approved'], true);
     }
 
     public function create(User $user): bool
@@ -55,7 +55,19 @@ class ContentItemPolicy
             return true;
         }
 
-        return $user->hasPermission('content.update') && $item->isAssignedTo($user);
+        if (! $user->hasPermission('content.update')) {
+            return false;
+        }
+
+        if ($item->isCollaborator($user)) {
+            return true;
+        }
+
+        if ((int) $item->owner_id === (int) $user->id) {
+            return false;
+        }
+
+        return (int) $item->created_by === (int) $user->id;
     }
 
     public function delete(User $user, ContentItem $item): bool

@@ -90,7 +90,7 @@ class ContentWorkflow
                 ],
             );
 
-            $this->notify($item->fresh(['owner', 'reviewer', 'status']), $to->slug, $actor, $note, $approval, $activity->id);
+            $this->notify($item->fresh(['owner', 'reviewer', 'status']), $from->slug, $to->slug, $actor, $note, $approval, $activity->id);
 
             return $item->fresh(['status', 'owner', 'reviewer']);
         });
@@ -138,31 +138,6 @@ class ContentWorkflow
             ]);
         }
 
-        if ($to->slug === 'revision_required' && blank($note)) {
-            throw ValidationException::withMessages([
-                'notes' => 'Explain what needs to change before requesting revisions.',
-            ]);
-        }
-
-        if ($to->slug === 'scheduled') {
-            $hasSchedule = $item->platformVersions()->whereNotNull('scheduled_at')->exists();
-
-            if (! $hasSchedule) {
-                throw ValidationException::withMessages([
-                    'status' => 'Add a platform version with a publishing date before scheduling. This does not change the production deadline.',
-                ]);
-            }
-        }
-
-        if ($to->slug === 'published') {
-            $hasUrl = $item->platformVersions()->whereNotNull('published_url')->where('published_url', '!=', '')->exists();
-
-            if (! $hasUrl) {
-                throw ValidationException::withMessages([
-                    'status' => 'Record a published URL on a platform version before marking the content as published.',
-                ]);
-            }
-        }
     }
 
     private function hasReviewSubstance(ContentItem $item): bool
@@ -174,7 +149,7 @@ class ContentWorkflow
             || $item->assets()->exists();
     }
 
-    private function notify(ContentItem $item, string $toSlug, User $actor, ?string $note, ?ContentApproval $approval, int $activityId): void
+    private function notify(ContentItem $item, string $fromSlug, string $toSlug, User $actor, ?string $note, ?ContentApproval $approval, int $activityId): void
     {
         $link = ['content_id' => $item->id];
         $eventKey = $approval?->id ?? $activityId;
@@ -204,8 +179,10 @@ class ContentWorkflow
             }
         }
 
-        if (in_array($toSlug, ['revision_required', 'approved'], true) && $item->owner && $item->owner->id !== $actor->id) {
-            $isRevision = $toSlug === 'revision_required';
+        $sentBack = $toSlug === 'in_progress' && $fromSlug === 'internal_review';
+
+        if (($sentBack || $toSlug === 'approved') && $item->owner && $item->owner->id !== $actor->id) {
+            $isRevision = $sentBack;
 
             $this->notifications->send(
                 $item->owner,

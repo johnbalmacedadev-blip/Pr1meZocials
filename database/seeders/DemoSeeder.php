@@ -139,7 +139,7 @@ class DemoSeeder extends Seeder
         $pour = $this->content($users['jordan@primez.test'], [
             'brand_id' => $northwind->id,
             'campaign_id' => $summer->id,
-            'status_id' => $statuses['scheduled'],
+            'status_id' => $statuses['approved'],
             'title' => 'Barista tip: the 30-second pour',
             'format' => 'reel',
             'priority' => 'medium',
@@ -163,7 +163,7 @@ class DemoSeeder extends Seeder
             'brand_id' => $northwind->id,
             'campaign_id' => $summer->id,
             'status_id' => $statuses['internal_review'],
-            'title' => 'Customer story: Mayaâ€™s morning ritual',
+            'title' => 'Customer story: Mayas morning ritual',
             'format' => 'photo',
             'priority' => 'medium',
             'funnel_stage' => 'consideration',
@@ -216,7 +216,7 @@ class DemoSeeder extends Seeder
         $this->content($users['sam@primez.test'], [
             'brand_id' => $northwind->id,
             'campaign_id' => $loyalty->id,
-            'status_id' => $statuses['ideation'],
+            'status_id' => $statuses['inbox'],
             'title' => 'Loyalty week teaser stories',
             'format' => 'story',
             'priority' => 'medium',
@@ -231,7 +231,7 @@ class DemoSeeder extends Seeder
         $jacket = $this->content($users['jordan@primez.test'], [
             'brand_id' => $harbor->id,
             'campaign_id' => $trail->id,
-            'status_id' => $statuses['revision_required'],
+            'status_id' => $statuses['in_progress'],
             'title' => 'Trail jacket in the rain',
             'format' => 'video',
             'priority' => 'urgent',
@@ -307,7 +307,7 @@ class DemoSeeder extends Seeder
         $this->content($users['jordan@primez.test'], [
             'brand_id' => $harbor->id,
             'campaign_id' => $trail->id,
-            'status_id' => $statuses['ready_for_brief'],
+            'status_id' => $statuses['ready_for_production'],
             'title' => 'Trail season offer creative',
             'format' => 'ad',
             'priority' => 'high',
@@ -362,7 +362,7 @@ class DemoSeeder extends Seeder
             'brand_id' => $northwind->id,
             'campaign_id' => $summer->id,
             'status_id' => $statuses['archived'],
-            'title' => 'Last yearâ€™s pumpkin draft',
+            'title' => 'Last years pumpkin draft',
             'format' => 'photo',
             'priority' => 'low',
             'archived_at' => now()->subMonth(),

@@ -37,6 +37,19 @@ class CreativeOperationsTest extends TestCase
         ])->assertSessionHasErrors('email');
 
         $this->assertGuest();
+
+        $admin = $this->makeUser('administrator', $brand, [
+            'username' => 'admin',
+            'email' => 'admin@primez.test',
+            'password' => 'admin',
+        ]);
+
+        $this->post('/login', [
+            'email' => 'admin',
+            'password' => 'admin',
+        ])->assertRedirect('/dashboard');
+
+        $this->assertAuthenticatedAs($admin);
     }
 
     public function test_administrator_can_create_a_user_and_a_manager_can_create_a_brand_and_campaign(): void
@@ -108,7 +121,7 @@ class CreativeOperationsTest extends TestCase
 
         $this->actingAs($manager)->put("/content/{$item->id}/assignment", [
             'owner_id' => $creative->id,
-            'reviewer_id' => $reviewer->id,
+            'collaborator_ids' => [$creative->id],
         ])->assertRedirect();
 
         $item->refresh();
@@ -125,15 +138,11 @@ class CreativeOperationsTest extends TestCase
 
         $this->assertDatabaseHas('creative_assets', ['content_item_id' => $item->id]);
 
-        foreach (['ready_for_brief', 'ready_for_production', 'in_progress', 'internal_review'] as $status) {
+        foreach (['ready_for_production', 'in_progress', 'internal_review'] as $status) {
             $this->actingAs($creative)->post("/content/{$item->id}/transition", [
                 'status' => $status,
             ])->assertRedirect()->assertSessionHasNoErrors();
         }
-
-        $this->actingAs($creative)->post("/content/{$item->id}/transition", [
-            'status' => 'approved',
-        ])->assertSessionHasErrors('status');
 
         $this->actingAs($reviewer)->post("/content/{$item->id}/reviews", [
             'decision' => 'revision_requested',
@@ -141,7 +150,7 @@ class CreativeOperationsTest extends TestCase
         ])->assertRedirect();
 
         $item->refresh();
-        $this->assertSame('revision_required', $item->status->slug);
+        $this->assertSame('in_progress', $item->status->slug);
         $this->assertDatabaseHas('content_approvals', [
             'content_item_id' => $item->id,
             'decision' => 'revision_requested',
@@ -303,6 +312,71 @@ class CreativeOperationsTest extends TestCase
         $this->actingAs($manager)->get('/content?status=archived')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('content.data.0.id', $first->id)
         );
+    }
+
+    public function test_an_assignee_from_another_brand_sees_the_task_on_their_dashboard(): void
+    {
+        $brand = $this->makeBrand('Northwind');
+        $other = $this->makeBrand('Prime Z');
+        $manager = $this->makeUser('marketing_manager', $brand);
+        $creative = $this->makeUser('creative', $other, ['name' => 'Sidney']);
+
+        $this->actingAs($manager)->post('/content', [
+            'title' => 'Customer story',
+            'brand_id' => $brand->id,
+            'format' => 'photo',
+        ])->assertRedirect();
+
+        $item = ContentItem::query()->where('title', 'Customer story')->firstOrFail();
+
+        $this->actingAs($manager)->put("/content/{$item->id}/assignment", [
+            'owner_id' => $creative->id,
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertTrue($creative->fresh()->canAccessBrand($brand->id));
+
+        $this->actingAs($creative)->get('/dashboard')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('metrics.tasks.0.id', $item->id)
+            ->where('metrics.tasks.0.title', 'Customer story')
+            ->where('metrics.tasks.0.role', 'Assigned')
+        );
+
+        $this->actingAs($creative)->get('/board')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('cards', fn ($cards) => collect($cards)->contains(fn ($card) => $card['id'] === $item->id))
+        );
+
+        $this->actingAs($creative)->get("/content/{$item->id}/edit")->assertForbidden();
+        $this->actingAs($creative)->put("/content/{$item->id}", [
+            'title' => 'Changed by the assignee',
+            'brand_id' => $brand->id,
+            'format' => 'photo',
+        ])->assertForbidden();
+
+        $this->actingAs($creative)->post("/content/{$item->id}/transition", [
+            'status' => 'in_progress',
+        ])->assertRedirect();
+
+        $this->actingAs($creative)->post("/content/{$item->id}/comments", [
+            'body' => 'Finished cut: https://example.com/video',
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertDatabaseHas('content_comments', [
+            'content_item_id' => $item->id,
+            'user_id' => $creative->id,
+            'body' => 'Finished cut: https://example.com/video',
+        ]);
+
+        $this->actingAs($creative)->get("/content/{$item->id}")->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('contentItem.abilities.comment', true)
+            ->where('contentItem.comments.0.body', 'Finished cut: https://example.com/video')
+        );
+
+        $this->actingAs($manager)->put("/content/{$item->id}/assignment", [
+            'owner_id' => $creative->id,
+            'collaborator_ids' => [$creative->id],
+        ])->assertRedirect();
+
+        $this->actingAs($creative)->get("/content/{$item->id}/edit")->assertOk();
     }
 
     private function pngUpload(): UploadedFile

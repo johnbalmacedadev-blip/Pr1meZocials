@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ContentItem;
+use App\Models\ResourceLink;
 use App\Models\Tag;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -29,6 +30,9 @@ class ContentWriter
                 $item->reference_number = $this->references->next();
                 $item->save();
                 $this->syncTags($item, $data['tag_ids'] ?? []);
+                if (array_key_exists('resource_link_ids', $data)) {
+                    $this->syncResourceLinks($item, $data['resource_link_ids'] ?? []);
+                }
                 $this->activity->log($item, $actor, 'created', 'Idea captured.', [
                     'format' => $item->format,
                     'brand_id' => $item->brand_id,
@@ -74,6 +78,10 @@ class ContentWriter
                 $this->syncTags($item, $data['tag_ids'] ?? []);
             }
 
+            if (array_key_exists('resource_link_ids', $data)) {
+                $this->syncResourceLinks($item, $data['resource_link_ids'] ?? []);
+            }
+
             if ($changes !== []) {
                 $this->activity->log($item, $actor, 'updated', 'Content details updated.', ['changes' => $changes]);
             }
@@ -109,6 +117,33 @@ class ContentWriter
         }
 
         $item->tags()->sync($valid->all());
+    }
+
+    /**
+     * @param  array<int, mixed>  $linkIds
+     */
+    private function syncResourceLinks(ContentItem $item, array $linkIds): void
+    {
+        $ids = collect($linkIds)->filter()->map(fn ($id) => (int) $id)->unique()->values();
+
+        if ($ids->isEmpty()) {
+            $item->resourceLinks()->sync([]);
+
+            return;
+        }
+
+        $valid = ResourceLink::query()
+            ->whereIn('id', $ids)
+            ->where('brand_id', $item->brand_id)
+            ->pluck('id');
+
+        if ($valid->count() !== $ids->count()) {
+            throw ValidationException::withMessages([
+                'resource_link_ids' => 'Choose creative assets that belong to this brand.',
+            ]);
+        }
+
+        $item->resourceLinks()->sync($valid->all());
     }
 
     private function scalar(mixed $value): mixed

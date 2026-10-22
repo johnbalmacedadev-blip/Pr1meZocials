@@ -74,7 +74,7 @@ class RolePermissionSeeder extends Seeder
                 'permissions' => [
                     'users.view', 'brands.view', 'tags.manage', 'campaigns.view', 'campaigns.manage',
                     'content.view', 'content.view.any', 'content.create', 'content.update', 'content.update.any',
-                    'content.archive', 'content.assign', 'content.transition', 'content.publish', 'content.export',
+                    'content.delete', 'content.archive', 'content.assign', 'content.transition', 'content.publish', 'content.export',
                     'assets.view', 'assets.upload', 'performance.view', 'performance.manage',
                     'comments.create', 'team.view', 'reports.view',
                 ],

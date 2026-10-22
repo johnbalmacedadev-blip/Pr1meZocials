@@ -71,8 +71,8 @@ export default function CalendarPage({ events, deadlines, view, focus, date, can
                 {(['month', 'week', 'day', 'list'] as const).map((option) => (
                     <button key={option} className={`rounded-full px-3 py-1 text-sm capitalize ${view === option ? 'bg-zinc-900 text-white' : 'bg-white'}`} onClick={() => router.get('/calendar', { view: option, date, focus }, { preserveState: true })}>{option}</button>
                 ))}
-                <button className={`rounded-full px-3 py-1 text-sm ${focus === 'publish' ? 'bg-teal-800 text-white' : 'bg-white'}`} onClick={() => router.get('/calendar', { view, date, focus: 'publish' }, { preserveState: true })}>Publishing</button>
-                <button className={`rounded-full px-3 py-1 text-sm ${focus === 'deadline' ? 'bg-teal-800 text-white' : 'bg-white'}`} onClick={() => router.get('/calendar', { view, date, focus: 'deadline' }, { preserveState: true })}>Production deadlines</button>
+                <button className={`rounded-full px-3 py-1 text-sm ${focus === 'publish' ? 'bg-brand-700 text-white' : 'bg-white'}`} onClick={() => router.get('/calendar', { view, date, focus: 'publish' }, { preserveState: true })}>Publishing</button>
+                <button className={`rounded-full px-3 py-1 text-sm ${focus === 'deadline' ? 'bg-brand-700 text-white' : 'bg-white'}`} onClick={() => router.get('/calendar', { view, date, focus: 'deadline' }, { preserveState: true })}>Production deadlines</button>
             </div>
             {events.some((event) => event.conflict) && focus === 'publish' && <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950">Some days have three or more posts for the same brand and platform.</p>}
             {view === 'list' ? (
@@ -95,7 +95,7 @@ export default function CalendarPage({ events, deadlines, view, focus, date, can
 function DayCell({ day, inMonth, events, draggable }: { day: Date; inMonth: boolean; events: CalendarEvent[]; draggable: boolean }) {
     const { setNodeRef, isOver } = useDroppable({ id: format(day, 'yyyy-MM-dd') });
     return (
-        <div ref={setNodeRef} className={`min-h-28 rounded-xl border bg-white p-2 ${inMonth ? 'border-zinc-200' : 'border-zinc-100 bg-zinc-50'} ${isOver ? 'ring-2 ring-teal-700' : ''}`}>
+        <div ref={setNodeRef} className={`min-h-28 rounded-xl border bg-white p-2 ${inMonth ? 'border-zinc-200' : 'border-zinc-100 bg-zinc-50'} ${isOver ? 'ring-2 ring-brand-700' : ''}`}>
             <p className="text-xs font-medium text-zinc-500">{format(day, 'd')}</p>
             <div className="mt-1 space-y-1">
                 {events.map((event) => <CalendarChip key={event.id} event={event} draggable={draggable && event.kind === 'publish'} />)}
@@ -116,7 +116,7 @@ function CalendarChip({ event, draggable }: { event: CalendarEvent; draggable: b
 
 function EventRow({ event }: { event: CalendarEvent }) {
     return (
-        <Link href={`/content/${event.content_id}`} className={`block rounded-md px-2 py-1 text-xs ${event.conflict ? 'bg-amber-100' : event.kind === 'deadline' ? 'bg-violet-50' : 'bg-teal-50'}`}>
+        <Link href={`/content/${event.content_id}`} className={`block rounded-md px-2 py-1 text-xs ${event.conflict ? 'bg-amber-100' : event.kind === 'deadline' ? 'bg-violet-50' : 'bg-brand-50'}`}>
             <span className="font-medium">{event.title}</span>
             <span className="mt-0.5 block text-zinc-600">{event.kind === 'deadline' ? 'Production deadline' : event.platform?.name} · {event.format_label}</span>
             <StatusBadge status={event.status} />

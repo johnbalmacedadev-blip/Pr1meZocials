@@ -17,8 +17,8 @@ export default function CampaignIndex({ campaigns, canManage }: { campaigns: { d
     return (
         <AppLayout>
             <Head title="Campaigns" />
-            <PageHeader title="Campaigns" description="Group ideas under the brand and time window they belong to." actions={canManage ? <Link href="/campaigns/create" className="inline-flex h-10 items-center rounded-lg bg-teal-800 px-3 text-sm font-medium text-white">New campaign</Link> : undefined} />
-            {campaigns.data.length === 0 ? <EmptyState title="No campaigns yet" body="Create a campaign when a set of ideas shares a goal and a date range." action={canManage ? <Link href="/campaigns/create" className="text-sm font-medium text-teal-800">Create a campaign</Link> : undefined} /> : (
+            <PageHeader title="Campaigns" description="Group ideas under the brand and time window they belong to." actions={canManage ? <Link href="/campaigns/create" className="inline-flex h-10 items-center rounded-lg bg-brand-700 px-3 text-sm font-medium text-white">New campaign</Link> : undefined} />
+            {campaigns.data.length === 0 ? <EmptyState title="No campaigns yet" body="Create a campaign when a set of ideas shares a goal and a date range." action={canManage ? <Link href="/campaigns/create" className="text-sm font-medium text-brand-700">Create a campaign</Link> : undefined} /> : (
                 <div className="grid gap-3 md:grid-cols-2">
                     {campaigns.data.map((campaign) => (
                         <Link key={campaign.id} href={`/campaigns/${campaign.id}`} className="rounded-xl border border-zinc-200 bg-white p-4 hover:border-zinc-400">
