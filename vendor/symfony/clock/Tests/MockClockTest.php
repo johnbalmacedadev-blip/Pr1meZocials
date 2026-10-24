@@ -1,0 +1,150 @@
+<?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier <fabien@symfony.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\Component\Clock\Tests;
+
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use Symfony\Component\Clock\MockClock;
+
+class MockClockTest extends TestCase
+{
+    public function testConstruct()
+    {
+        $clock = new MockClock();
+        $this->assertSame('UTC', $clock->now()->getTimezone()->getName());
+
+        $tz = 'Europe/Paris';
+        $clock = new MockClock($tz);
+        $this->assertSame($tz, $clock->now()->getTimezone()->getName());
+
+        $clock = new MockClock('now', $tz);
+        $this->assertSame($tz, $clock->now()->getTimezone()->getName());
+
+        $clock = new MockClock('now', new \DateTimeZone($tz));
+        $this->assertSame($tz, $clock->now()->getTimezone()->getName());
+
+        $now = new \DateTimeImmutable();
+        $clock = new MockClock($now);
+        $this->assertEquals($now, $clock->now());
+
+        $clock = new MockClock('2022-06-20 00:00:00');
+        $this->assertSame('2022-06-20 00:00:00', $clock->now()->format('Y-m-d H:i:s'));
+    }
+
+    public function testNow()
+    {
+        $before = new \DateTimeImmutable();
+        usleep(1);
+        $clock = new MockClock();
+        usleep(1);
+        $after = new \DateTimeImmutable();
+
+        $this->assertGreaterThan($before, $clock->now());
+        $this->assertLessThan($after, $clock->now());
+
+        $this->assertEquals($clock->now(), $clock->now());
+        $this->assertNotSame($clock->now(), $clock->now());
+    }
+
+    public function testSleep()
+    {
+        $clock = new MockClock((new \DateTimeImmutable('2112-09-17 23:53:00.999Z'))->setTimezone(new \DateTimeZone('UTC')));
+        $tz = $clock->now()->getTimezone()->getName();
+
+        $clock->sleep(2.002001);
+        $this->assertSame('2112-09-17 23:53:03.001001', $clock->now()->format('Y-m-d H:i:s.u'));
+        $this->assertSame($tz, $clock->now()->getTimezone()->getName());
+    }
+
+    #[DataProvider('provideSleepDurations')]
+    public function testSleepCarriesSecondsAndKeepsTimezone(string $now, string $timezone, float|int $seconds, string $expected)
+    {
+        $clock = new MockClock(new \DateTimeImmutable($now), $timezone);
+
+        $clock->sleep($seconds);
+
+        $this->assertSame($expected, $clock->now()->format('Y-m-d\TH:i:s.uP'));
+        $this->assertSame($timezone, $clock->now()->getTimezone()->getName());
+    }
+
+    public static function provideSleepDurations(): iterable
+    {
+        yield 'integer' => ['2024-01-01T00:00:00.5Z', 'UTC', 3, '2024-01-01T00:00:03.500000+00:00'];
+        yield 'microsecond carry' => ['2024-01-01T00:00:00.999999Z', 'UTC', 0.000002, '2024-01-01T00:00:01.000001+00:00'];
+        yield 'below one microsecond' => ['2024-01-01T00:00:00.5Z', 'UTC', 0.0000004, '2024-01-01T00:00:00.500000+00:00'];
+        yield 'more than 2^31 microseconds' => ['2024-01-01T00:00:00.5Z', 'UTC', 3600, '2024-01-01T01:00:00.500000+00:00'];
+        yield 'before 1970' => ['1969-12-31T23:59:59.5Z', 'UTC', 0.75, '1970-01-01T00:00:00.250000+00:00'];
+        yield 'long before 1970' => ['1961-07-09T12:00:31.961111Z', 'UTC', 0.5, '1961-07-09T12:00:32.461111+00:00'];
+        yield 'DST fall-back' => ['2026-10-25T00:59:59.9Z', 'Europe/Madrid', 0.2, '2026-10-25T02:00:00.100000+01:00'];
+    }
+
+    public static function provideValidModifyStrings(): iterable
+    {
+        yield 'absolute datetime value' => [
+            '2112-09-17 23:53:03.001',
+            '2112-09-17 23:53:03.001000',
+        ];
+
+        yield 'relative modified date' => [
+            '+2 days',
+            '2112-09-19 23:53:00.999000',
+        ];
+    }
+
+    #[DataProvider('provideValidModifyStrings')]
+    public function testModifyWithSpecificDateTime(string $modifiedNow, string $expectedNow)
+    {
+        $clock = new MockClock((new \DateTimeImmutable('2112-09-17 23:53:00.999Z'))->setTimezone(new \DateTimeZone('UTC')));
+        $tz = $clock->now()->getTimezone()->getName();
+
+        $clock->modify($modifiedNow);
+
+        $this->assertSame($expectedNow, $clock->now()->format('Y-m-d H:i:s.u'));
+        $this->assertSame($tz, $clock->now()->getTimezone()->getName());
+    }
+
+    public static function provideInvalidModifyStrings(): iterable
+    {
+        yield 'Named holiday is not recognized' => ['Halloween'];
+        yield 'empty string' => [''];
+    }
+
+    #[DataProvider('provideInvalidModifyStrings')]
+    public function testModifyThrowsOnInvalidString(string $modifiedNow)
+    {
+        $clock = new MockClock((new \DateTimeImmutable('2112-09-17 23:53:00.999Z'))->setTimezone(new \DateTimeZone('UTC')));
+
+        $this->expectException(\DateMalformedStringException::class);
+        $this->expectExceptionMessage("Failed to parse time string ($modifiedNow)");
+
+        $clock->modify($modifiedNow);
+    }
+
+    public function testWithTimeZone()
+    {
+        $clock = new MockClock();
+        $utcClock = $clock->withTimeZone('UTC');
+
+        $this->assertNotSame($clock, $utcClock);
+        $this->assertSame('UTC', $utcClock->now()->getTimezone()->getName());
+    }
+
+    public function testSleepWithNegativeValueDoesNothing()
+    {
+        $initialTime = new \DateTimeImmutable('2000-01-01 12:00:00 UTC');
+
+        $clock = new MockClock($initialTime);
+        $clock->sleep(-10.5);
+
+        $this->assertEquals($initialTime, $clock->now());
+    }
+}

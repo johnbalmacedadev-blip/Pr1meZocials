@@ -1,0 +1,406 @@
+{
+  "_AppLayout-BqMXYOgP.js": {
+    "file": "assets/AppLayout-BqMXYOgP.js",
+    "name": "AppLayout",
+    "imports": [
+      "resources/js/app.tsx",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "_ContentForm-9Ym6wE9G.js": {
+    "file": "assets/ContentForm-9Ym6wE9G.js",
+    "name": "ContentForm",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "_FacebookGlyph-lDRwhnx7.js": {
+    "file": "assets/FacebookGlyph-lDRwhnx7.js",
+    "name": "FacebookGlyph",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "_GuestLayout-AoHgNQP0.js": {
+    "file": "assets/GuestLayout-AoHgNQP0.js",
+    "name": "GuestLayout",
+    "imports": [
+      "resources/js/app.tsx",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "_Logo-DAOa3YhW.js": {
+    "file": "assets/Logo-DAOa3YhW.js",
+    "name": "Logo",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "_TaskNotes-CEaq0I-N.js": {
+    "file": "assets/TaskNotes-CEaq0I-N.js",
+    "name": "TaskNotes",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "_core.esm-R5SP7sQY.js": {
+    "file": "assets/core.esm-R5SP7sQY.js",
+    "name": "core.esm",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "_parseISO-V6xpKibE.js": {
+    "file": "assets/parseISO-V6xpKibE.js",
+    "name": "parseISO"
+  },
+  "_pencil-BXCOiflc.js": {
+    "file": "assets/pencil-BXCOiflc.js",
+    "name": "pencil",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "_trash-CWgGuQOb.js": {
+    "file": "assets/trash-CWgGuQOb.js",
+    "name": "trash",
+    "imports": [
+      "resources/js/app.tsx"
+    ]
+  },
+  "resources/css/app.css": {
+    "file": "assets/app-CKATNhA9.css",
+    "src": "resources/css/app.css",
+    "isEntry": true
+  },
+  "resources/js/Pages/Assets/Index.tsx": {
+    "file": "assets/Index-wkpiN0Od.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Assets/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Auth/Join.tsx": {
+    "file": "assets/Join-lp25qZng.js",
+    "name": "Join",
+    "src": "resources/js/Pages/Auth/Join.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_GuestLayout-AoHgNQP0.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Auth/Login.tsx": {
+    "file": "assets/Login-B2DEFy_v.js",
+    "name": "Login",
+    "src": "resources/js/Pages/Auth/Login.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_GuestLayout-AoHgNQP0.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Board/Index.tsx": {
+    "file": "assets/Index-Xo33M5Lf.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Board/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_core.esm-R5SP7sQY.js",
+      "_TaskNotes-CEaq0I-N.js",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Calendar/Index.tsx": {
+    "file": "assets/Index-B2LUXZ6j.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Calendar/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_core.esm-R5SP7sQY.js",
+      "_AppLayout-BqMXYOgP.js",
+      "_parseISO-V6xpKibE.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Campaigns/Form.tsx": {
+    "file": "assets/Form-BAkN77tZ.js",
+    "name": "Form",
+    "src": "resources/js/Pages/Campaigns/Form.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Campaigns/Index.tsx": {
+    "file": "assets/Index-BKWwJzaP.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Campaigns/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Campaigns/Show.tsx": {
+    "file": "assets/Show-8CSF6b4O.js",
+    "name": "Show",
+    "src": "resources/js/Pages/Campaigns/Show.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Content/Create.tsx": {
+    "file": "assets/Create-BXFCqQPg.js",
+    "name": "Create",
+    "src": "resources/js/Pages/Content/Create.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_ContentForm-9Ym6wE9G.js",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Content/Edit.tsx": {
+    "file": "assets/Edit-Cb3mQsA_.js",
+    "name": "Edit",
+    "src": "resources/js/Pages/Content/Edit.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_ContentForm-9Ym6wE9G.js",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Content/Index.tsx": {
+    "file": "assets/Index-BWY3HcId.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Content/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_trash-CWgGuQOb.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Content/Show.tsx": {
+    "file": "assets/Show-D3iGlVDA.js",
+    "name": "Show",
+    "src": "resources/js/Pages/Content/Show.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Dashboard.tsx": {
+    "file": "assets/Dashboard-DE4YIELq.js",
+    "name": "Dashboard",
+    "src": "resources/js/Pages/Dashboard.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_parseISO-V6xpKibE.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Error.tsx": {
+    "file": "assets/Error-xWCnH9Cw.js",
+    "name": "Error",
+    "src": "resources/js/Pages/Error.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_GuestLayout-AoHgNQP0.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Inspiration/Index.tsx": {
+    "file": "assets/Index-DUsmWJVg.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Inspiration/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_pencil-BXCOiflc.js",
+      "_trash-CWgGuQOb.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Notifications/Index.tsx": {
+    "file": "assets/Index-y3RJLPxm.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Notifications/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Performance/Index.tsx": {
+    "file": "assets/Index-KKjaQA3d.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Performance/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Posting/Index.tsx": {
+    "file": "assets/Index-DVPD0NE6.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Posting/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_FacebookGlyph-lDRwhnx7.js",
+      "_AppLayout-BqMXYOgP.js",
+      "_pencil-BXCOiflc.js",
+      "_trash-CWgGuQOb.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Profile/Edit.tsx": {
+    "file": "assets/Edit-CEgGv6Hd.js",
+    "name": "Edit",
+    "src": "resources/js/Pages/Profile/Edit.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Resources/Index.tsx": {
+    "file": "assets/Index-Dktf2ZIY.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Resources/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_pencil-BXCOiflc.js",
+      "_trash-CWgGuQOb.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Schedule/Posting.tsx": {
+    "file": "assets/Posting-BYpXQ3a8.js",
+    "name": "Posting",
+    "src": "resources/js/Pages/Schedule/Posting.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_FacebookGlyph-lDRwhnx7.js",
+      "_AppLayout-BqMXYOgP.js",
+      "_pencil-BXCOiflc.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Search/Index.tsx": {
+    "file": "assets/Index-BQ3sQZJt.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Search/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Settings/Index.tsx": {
+    "file": "assets/Index-RuFyW4-e.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Settings/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_pencil-BXCOiflc.js",
+      "_trash-CWgGuQOb.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Team/Index.tsx": {
+    "file": "assets/Index-5eVa1-Ka.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Team/Index.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_AppLayout-BqMXYOgP.js",
+      "_pencil-BXCOiflc.js",
+      "_trash-CWgGuQOb.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/Pages/Team/Show.tsx": {
+    "file": "assets/Show-B88fZNcu.js",
+    "name": "Show",
+    "src": "resources/js/Pages/Team/Show.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.tsx",
+      "_TaskNotes-CEaq0I-N.js",
+      "_AppLayout-BqMXYOgP.js",
+      "_Logo-DAOa3YhW.js"
+    ]
+  },
+  "resources/js/app.tsx": {
+    "file": "assets/app-CCkVX_Kk.js",
+    "name": "app",
+    "src": "resources/js/app.tsx",
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/Pages/Assets/Index.tsx",
+      "resources/js/Pages/Auth/Join.tsx",
+      "resources/js/Pages/Auth/Login.tsx",
+      "resources/js/Pages/Board/Index.tsx",
+      "resources/js/Pages/Calendar/Index.tsx",
+      "resources/js/Pages/Campaigns/Form.tsx",
+      "resources/js/Pages/Campaigns/Index.tsx",
+      "resources/js/Pages/Campaigns/Show.tsx",
+      "resources/js/Pages/Content/Create.tsx",
+      "resources/js/Pages/Content/Edit.tsx",
+      "resources/js/Pages/Content/Index.tsx",
+      "resources/js/Pages/Content/Show.tsx",
+      "resources/js/Pages/Dashboard.tsx",
+      "resources/js/Pages/Error.tsx",
+      "resources/js/Pages/Inspiration/Index.tsx",
+      "resources/js/Pages/Notifications/Index.tsx",
+      "resources/js/Pages/Performance/Index.tsx",
+      "resources/js/Pages/Posting/Index.tsx",
+      "resources/js/Pages/Profile/Edit.tsx",
+      "resources/js/Pages/Resources/Index.tsx",
+      "resources/js/Pages/Schedule/Posting.tsx",
+      "resources/js/Pages/Search/Index.tsx",
+      "resources/js/Pages/Settings/Index.tsx",
+      "resources/js/Pages/Team/Index.tsx",
+      "resources/js/Pages/Team/Show.tsx"
+    ]
+  }
+}
