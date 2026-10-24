@@ -1,4 +1,4 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { Eye, Heart, ImagePlus, MessageCircle, Pencil, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import FacebookGlyph from '@/Components/FacebookGlyph';
@@ -689,9 +689,9 @@ export default function PostingIndex({
                                                     Posted by {post.author?.name ?? 'Unknown user'}
                                                 </p>
                                                 {post.content && (
-                                                    <a href={`/content/${post.content.id}`} className="mt-1 inline-block text-xs text-brand-700 hover:underline">
+                                                    <Link href={`/content/${post.content.id}`} className="mt-1 inline-block text-xs text-brand-700 hover:underline">
                                                         Linked content: {post.content.reference_number} · {post.content.title}
-                                                    </a>
+                                                    </Link>
                                                 )}
                                                 {editingPostId === post.id && canEdit ? (
                                                     <HistoryCaptionEditor

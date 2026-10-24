@@ -6,6 +6,20 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
+/** Prefix root-relative paths with the app subdirectory (e.g. /pr1mesocials). */
+export function withBase(path: string, basePath = ''): string {
+    if (!path.startsWith('/') || path.startsWith('//') || /^https?:/i.test(path)) {
+        return path;
+    }
+
+    const base = basePath.replace(/\/$/, '');
+    if (!base || path === base || path.startsWith(`${base}/`)) {
+        return path;
+    }
+
+    return `${base}${path}`;
+}
+
 export function visitFilters(url: string, filters: Record<string, string | number | boolean | null | undefined>) {
     const query: Record<string, string> = {};
 

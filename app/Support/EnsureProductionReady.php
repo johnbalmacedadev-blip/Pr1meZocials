@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
- * Shared-hosting bootstrap: after git pull, the first web request
- * creates storage folders, runs migrations, and seeds if needed.
+ * Shared-hosting bootstrap: keep the schema current after every git pull,
+ * and seed once when the database is empty.
  */
 class EnsureProductionReady
 {
@@ -22,11 +22,6 @@ class EnsureProductionReady
         }
 
         self::$attempted = true;
-
-        $lockPath = storage_path('framework/install.lock');
-        if (is_file($lockPath)) {
-            return;
-        }
 
         foreach ([
             storage_path('app/public'),
@@ -44,13 +39,16 @@ class EnsureProductionReady
         }
 
         try {
+            // Always migrate — install.lock must not block newer migrations after a pull.
             Artisan::call('migrate', ['--force' => true]);
 
-            if (! Schema::hasTable('users') || User::query()->doesntExist()) {
-                Artisan::call('db:seed', ['--force' => true]);
+            $lockPath = storage_path('framework/install.lock');
+            if (! is_file($lockPath)) {
+                if (! Schema::hasTable('users') || User::query()->doesntExist()) {
+                    Artisan::call('db:seed', ['--force' => true]);
+                }
+                @file_put_contents($lockPath, date('c').PHP_EOL);
             }
-
-            @file_put_contents($lockPath, date('c').PHP_EOL);
         } catch (Throwable $exception) {
             @file_put_contents(
                 storage_path('logs/deploy-bootstrap.log'),

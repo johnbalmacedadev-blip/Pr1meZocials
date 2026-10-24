@@ -1,7 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { EmptyState, PageHeader, Pagination } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
-import { formatBytes, formatDate } from '@/lib/utils';
+import { formatBytes, formatDate, withBase } from '@/lib/utils';
 import type { SharedProps } from '@/types';
 import { usePage } from '@inertiajs/react';
 
@@ -22,7 +22,8 @@ interface AssetRow {
 }
 
 export default function Assets({ assets, filters }: { assets: { data: AssetRow[]; prev: string | null; next: string | null; total: number; from?: number | null; to?: number | null }; filters: Record<string, string>; kinds: { value: string; label: string }[] }) {
-    const brands = usePage<SharedProps>().props.auth.user?.brands ?? [];
+    const { auth, basePath = '' } = usePage<SharedProps>().props;
+    const brands = auth.user?.brands ?? [];
     return (
         <AppLayout>
             <Head title="Creative assets" />
@@ -36,12 +37,12 @@ export default function Assets({ assets, filters }: { assets: { data: AssetRow[]
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {assets.data.map((asset) => (
                         <article key={asset.id} className="rounded-xl border border-zinc-200 bg-white p-4">
-                            {asset.previewable && asset.mime_type.startsWith('image/') && <img alt="" src={`/assets/${asset.id}/preview`} className="mb-3 h-36 w-full rounded-lg object-cover" />}
+                            {asset.previewable && asset.mime_type.startsWith('image/') && <img alt="" src={withBase(`/assets/${asset.id}/preview`, basePath)} className="mb-3 h-36 w-full rounded-lg object-cover" />}
                             <h2 className="font-medium">{asset.name}</h2>
                             <p className="text-sm text-zinc-500">{asset.kind_label} · v{asset.version} · {formatBytes(asset.size)}</p>
                             <p className="text-sm text-zinc-500">{asset.brand?.name} · {asset.uploader?.name} · {formatDate(asset.created_at)}</p>
                             <div className="mt-2 flex gap-3 text-sm">
-                                <a className="font-medium text-brand-700" href={`/assets/${asset.id}/download`}>Download</a>
+                                <a className="font-medium text-brand-700" href={withBase(`/assets/${asset.id}/download`, basePath)}>Download</a>
                                 {asset.content_id && <Link className="text-zinc-700" href={`/content/${asset.content_id}`}>{asset.content_title}</Link>}
                             </div>
                         </article>
