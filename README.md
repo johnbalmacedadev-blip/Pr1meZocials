@@ -6,12 +6,12 @@ Social metrics are entered by hand. This application does not connect to Faceboo
 
 ## Requirements
 
-- PHP 8.5 or newer with: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `fileinfo`, and `curl`. `gd` is optional.
+- PHP 8.4 or newer with: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `fileinfo`, and `curl`. `gd` is optional.
 - Composer 2
 - Node.js 20 or newer and npm
 - MySQL 8 or MariaDB 10.4+
 
-This project uses Laravel 12, which supports PHP 8.5. On Windows, install PHP 8.5 (for example `winget install PHP.PHP.8.5`) and keep it ahead of any older XAMPP PHP on your PATH. MariaDB/MySQL from XAMPP can still be used for the database.
+This project uses Laravel 12 (PHP 8.2–8.5). Shared hosting and local XAMPP with PHP 8.4 are supported. MariaDB/MySQL from XAMPP can still be used for the database.
 
 ## Local setup
 
