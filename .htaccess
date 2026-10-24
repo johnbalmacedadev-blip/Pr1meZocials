@@ -1,0 +1,13 @@
+<IfModule mod_rewrite.c>
+    Options -Indexes +FollowSymLinks
+    RewriteEngine On
+
+    # Shared hosting often points the site/subdirectory at the project root.
+    # Laravel's front controller lives in /public — send all traffic there.
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    Options -Indexes
+    DirectoryIndex public/index.php
+</IfModule>
