@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\SafeEncrypted;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -30,10 +32,17 @@ class SocialAccount extends Model
     {
         return [
             'is_active' => 'boolean',
-            'access_token' => 'encrypted',
             'token_expires_at' => 'datetime',
             'meta' => 'array',
         ];
+    }
+
+    protected function accessToken(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => SafeEncrypted::get($value),
+            set: fn (?string $value) => SafeEncrypted::set($value),
+        );
     }
 
     public function brand(): BelongsTo
@@ -60,6 +69,6 @@ class SocialAccount extends Model
     {
         return $this->is_active
             && filled($this->external_id)
-            && filled($this->access_token);
+            && SafeEncrypted::present($this->getRawOriginal('access_token'));
     }
 }

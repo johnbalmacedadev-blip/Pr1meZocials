@@ -98,6 +98,7 @@ export default function PostingIndex({
     metaConfigured,
     composeDefaults,
     focus,
+    loadError = null,
 }: {
     pages: PageOption[];
     posts: PostRow[];
@@ -108,6 +109,7 @@ export default function PostingIndex({
     canManagePages: boolean;
     composeDefaults?: ComposeDefaults | null;
     focus?: { tab?: TabId | null; post_id?: number | null } | null;
+    loadError?: string | null;
 }) {
     const managedPages = useMemo(
         () => pages.filter((page) => page.is_active && page.is_ready && page.can_post !== false),
@@ -373,6 +375,13 @@ export default function PostingIndex({
                     </div>
                 )}
             />
+
+            {loadError && (
+                <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                    <p className="font-medium">Posting data could not load completely.</p>
+                    <p className="mt-1 break-words font-mono text-xs">{loadError}</p>
+                </div>
+            )}
 
             <div className="mb-4 flex gap-2 overflow-x-auto">
                 {TABS.map((item) => (

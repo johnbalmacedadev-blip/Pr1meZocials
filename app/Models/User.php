@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\SafeEncrypted;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -39,14 +41,21 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'last_seen_at' => 'datetime',
-            'facebook_user_token' => 'encrypted',
             'facebook_token_expires_at' => 'datetime',
         ];
     }
 
+    protected function facebookUserToken(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => SafeEncrypted::get($value),
+            set: fn (?string $value) => SafeEncrypted::set($value),
+        );
+    }
+
     public function hasFacebookConnection(): bool
     {
-        return filled($this->facebook_user_token);
+        return SafeEncrypted::present($this->getRawOriginal('facebook_user_token'));
     }
 
     public function roles(): BelongsToMany

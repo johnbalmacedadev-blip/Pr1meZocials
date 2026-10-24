@@ -26,86 +26,108 @@ class SocialPostingController extends Controller
         $user = $request->user();
         abort_unless($user->hasPermission('content.publish'), 403);
 
-        $accessiblePageIds = $user->accessibleSocialAccountIds();
+        try {
+            $accessiblePageIds = $user->accessibleSocialAccountIds();
 
-        $pages = SocialAccount::query()
-            ->with('brand:id,name')
-            ->whereHas('platform', fn ($query) => $query->where('slug', 'facebook'))
-            ->when(! $user->isAdmin(), fn ($query) => $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0]))
-            ->orderByDesc('is_active')
-            ->orderBy('name')
-            ->get()
-            ->map(fn (SocialAccount $account) => [
-                'id' => $account->id,
-                'name' => $account->name,
-                'handle' => $account->handle,
-                'external_id' => $account->external_id,
-                'is_active' => $account->is_active,
-                'is_ready' => filled($account->external_id) && filled($account->access_token),
-                'can_post' => $user->isAdmin() || in_array((int) $account->id, $accessiblePageIds, true),
-                'brand' => $account->brand?->only(['id', 'name']),
-                'profile_url' => $account->profile_url,
-            ]);
+            $pages = SocialAccount::query()
+                ->with('brand:id,name')
+                ->whereHas('platform', fn ($query) => $query->where('slug', 'facebook'))
+                ->when(! $user->isAdmin(), fn ($query) => $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0]))
+                ->orderByDesc('is_active')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (SocialAccount $account) => [
+                    'id' => $account->id,
+                    'name' => $account->name,
+                    'handle' => $account->handle,
+                    'external_id' => $account->external_id,
+                    'is_active' => $account->is_active,
+                    'is_ready' => $account->isFacebookReady(),
+                    'can_post' => $user->isAdmin() || in_array((int) $account->id, $accessiblePageIds, true),
+                    'brand' => $account->brand?->only(['id', 'name']),
+                    'profile_url' => $account->profile_url,
+                ]);
 
-        $postsQuery = SocialPost::query()
-            ->with(['account:id,name,external_id', 'user:id,name', 'contentItem:id,title,reference_number'])
-            ->whereHas('account', function ($query) use ($user, $accessiblePageIds) {
-                $query->whereHas('platform', fn ($platform) => $platform->where('slug', 'facebook'));
-                if (! $user->isAdmin()) {
-                    $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0])
-                        ->whereIn('id', $accessiblePageIds ?: [0]);
+            $postsQuery = SocialPost::query()
+                ->with(['account:id,name,external_id', 'user:id,name', 'contentItem:id,title,reference_number'])
+                ->whereHas('account', function ($query) use ($user, $accessiblePageIds) {
+                    $query->whereHas('platform', fn ($platform) => $platform->where('slug', 'facebook'));
+                    if (! $user->isAdmin()) {
+                        $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0])
+                            ->whereIn('id', $accessiblePageIds ?: [0]);
+                    }
+                });
+
+            $posts = (clone $postsQuery)
+                ->latest('id')
+                ->limit(40)
+                ->get();
+
+            $focusPostId = $request->integer('post') ?: null;
+            if ($focusPostId && ! $posts->contains('id', $focusPostId)) {
+                $focused = (clone $postsQuery)->whereKey($focusPostId)->first();
+                if ($focused) {
+                    $posts = $posts->prepend($focused)->unique('id')->values();
+                } else {
+                    $focusPostId = null;
                 }
-            });
-
-        $posts = (clone $postsQuery)
-            ->latest('id')
-            ->limit(40)
-            ->get();
-
-        $focusPostId = $request->integer('post') ?: null;
-        if ($focusPostId && ! $posts->contains('id', $focusPostId)) {
-            $focused = (clone $postsQuery)->whereKey($focusPostId)->first();
-            if ($focused) {
-                $posts = $posts->prepend($focused)->unique('id')->values();
-            } else {
-                $focusPostId = null;
             }
+
+            $contentOptions = ContentItem::query()
+                ->visibleTo($user)
+                ->whereHas('status', fn ($query) => $query->where('slug', '!=', 'archived'))
+                ->with('status:id,name')
+                ->orderByDesc('id')
+                ->limit(200)
+                ->get(['id', 'title', 'reference_number', 'status_id'])
+                ->map(fn (ContentItem $item) => [
+                    'id' => $item->id,
+                    'title' => $item->title,
+                    'reference_number' => $item->reference_number,
+                    'status' => $item->status?->name,
+                ])
+                ->values();
+
+            $tab = $request->string('tab')->toString();
+            if (! in_array($tab, ['compose', 'history', 'pages'], true)) {
+                $tab = $focusPostId ? 'history' : 'compose';
+            }
+
+            return Inertia::render('Posting/Index', [
+                'pages' => $pages,
+                'posts' => $posts->map(fn (SocialPost $post) => $this->presentPost($post))->values(),
+                'contentOptions' => $contentOptions,
+                'brands' => $user->accessibleBrands()->map->only(['id', 'name'])->values(),
+                'metaConnected' => $user->hasFacebookConnection(),
+                'metaConfigured' => filled(config('facebook.app_id')) && filled(config('facebook.app_secret')),
+                'canManagePages' => $user->hasPermission('content.publish'),
+                'composeDefaults' => $this->composeDefaults($request),
+                'focus' => [
+                    'tab' => $tab,
+                    'post_id' => $focusPostId,
+                ],
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+            @file_put_contents(
+                storage_path('logs/posting-error.log'),
+                '['.date('c').'] '.$exception->getMessage()."\n".$exception->getFile().':'.$exception->getLine()."\n\n",
+                FILE_APPEND
+            );
+
+            return Inertia::render('Posting/Index', [
+                'pages' => [],
+                'posts' => [],
+                'contentOptions' => [],
+                'brands' => $user->accessibleBrands()->map->only(['id', 'name'])->values(),
+                'metaConnected' => false,
+                'metaConfigured' => filled(config('facebook.app_id')) && filled(config('facebook.app_secret')),
+                'canManagePages' => $user->hasPermission('content.publish'),
+                'composeDefaults' => $this->composeDefaults($request),
+                'focus' => ['tab' => 'compose', 'post_id' => null],
+                'loadError' => $exception->getMessage(),
+            ]);
         }
-
-        $contentOptions = ContentItem::query()
-            ->visibleTo($user)
-            ->whereHas('status', fn ($query) => $query->where('slug', '!=', 'archived'))
-            ->with('status:id,name')
-            ->orderByDesc('id')
-            ->limit(200)
-            ->get(['id', 'title', 'reference_number', 'status_id'])
-            ->map(fn (ContentItem $item) => [
-                'id' => $item->id,
-                'title' => $item->title,
-                'reference_number' => $item->reference_number,
-                'status' => $item->status?->name,
-            ])
-            ->values();
-
-        $tab = $request->string('tab')->toString();
-        if (! in_array($tab, ['compose', 'history', 'pages'], true)) {
-            $tab = $focusPostId ? 'history' : 'compose';
-        }
-
-        return Inertia::render('Posting/Index', [
-            'pages' => $pages,
-            'posts' => $posts->map(fn (SocialPost $post) => $this->presentPost($post))->values(),
-            'contentOptions' => $contentOptions,
-            'brands' => $user->accessibleBrands()->map->only(['id', 'name'])->values(),
-            'metaConnected' => $user->hasFacebookConnection(),
-            'metaConfigured' => filled(config('facebook.app_id')) && filled(config('facebook.app_secret')),
-            'canManagePages' => $user->hasPermission('content.publish'),
-            'composeDefaults' => $this->composeDefaults($request),
-            'focus' => [
-                'tab' => $tab,
-                'post_id' => $focusPostId,
-            ],
-        ]);
     }
 
     public function redirectToFacebook(Request $request, FacebookPublisher $publisher): RedirectResponse
