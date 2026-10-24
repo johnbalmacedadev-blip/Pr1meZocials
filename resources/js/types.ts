@@ -59,6 +59,7 @@ export interface SharedProps {
         formulas: Record<string, string>;
     } | null;
     appName: string;
+    basePath: string;
 }
 
 export interface ContentSummary {
