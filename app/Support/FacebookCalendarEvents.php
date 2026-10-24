@@ -17,7 +17,7 @@ class FacebookCalendarEvents
      */
     public static function inRange(User $user, Carbon $start, Carbon $end): Collection
     {
-        $accessiblePageIds = $user->accessibleSocialAccountIds();
+        $visiblePageIds = $user->visibleSocialAccountIds();
 
         return SocialPost::query()
             ->with(['account:id,name,brand_id', 'user:id,name', 'contentItem:id,title,reference_number'])
@@ -34,7 +34,7 @@ class FacebookCalendarEvents
             })
             ->when(
                 ! $user->isAdmin(),
-                fn ($query) => $query->whereIn('social_account_id', $accessiblePageIds ?: [0])
+                fn ($query) => $query->whereIn('social_account_id', $visiblePageIds ?: [0])
             )
             ->orderByRaw('COALESCE(scheduled_publish_at, published_at) asc')
             ->get()

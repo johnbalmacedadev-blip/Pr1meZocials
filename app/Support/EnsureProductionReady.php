@@ -42,6 +42,11 @@ class EnsureProductionReady
             // Always migrate — install.lock must not block newer migrations after a pull.
             Artisan::call('migrate', ['--force' => true]);
 
+            // Keep role permissions current after every pull (idempotent sync).
+            if (Schema::hasTable('permissions') && Schema::hasTable('roles')) {
+                Artisan::call('db:seed', ['--class' => 'Database\\Seeders\\RolePermissionSeeder', '--force' => true]);
+            }
+
             $lockPath = storage_path('framework/install.lock');
             if (! is_file($lockPath)) {
                 if (! Schema::hasTable('users') || User::query()->doesntExist()) {

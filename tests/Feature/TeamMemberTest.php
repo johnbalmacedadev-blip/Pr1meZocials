@@ -59,7 +59,7 @@ class TeamMemberTest extends TestCase
         $this->assertSoftDeleted('users', ['id' => $member->id]);
     }
 
-    public function test_a_creative_signing_in_from_the_team_page_lands_on_the_dashboard(): void
+    public function test_a_creative_can_view_team_but_not_manage_members_or_open_settings_campaigns(): void
     {
         $brand = $this->makeBrand('Northwind');
         $creative = $this->makeUser('creative', $brand, [
@@ -67,16 +67,24 @@ class TeamMemberTest extends TestCase
             'email' => 'casey@example.com',
         ]);
 
-        $this->withSession(['url.intended' => url('/team')])
-            ->post('/login', [
-                'email' => 'casey@example.com',
-                'password' => 'password',
-            ])
-            ->assertRedirect('/dashboard');
+        $this->assertTrue($creative->hasPermission('team.view'));
+        $this->assertFalse($creative->hasPermission('team.create'));
+        $this->assertFalse($creative->hasPermission('campaigns.view'));
+        $this->assertFalse($creative->hasPermission('settings.view'));
+        $this->assertFalse($creative->hasPermission('settings.manage'));
 
-        $this->actingAs($creative)->get('/dashboard')->assertOk()->assertInertia(fn ($page) => $page->component('Dashboard'));
-        $this->actingAs($creative)->get('/team')->assertRedirect('/dashboard');
-        $this->actingAs($creative)->get('/team/'.$creative->id)->assertRedirect('/dashboard');
+        $this->actingAs($creative)->get('/team')->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Team/Index')
+            ->where('canManage', false)
+        );
+        $this->actingAs($creative)->get('/team/'.$creative->id)->assertOk();
+        $this->actingAs($creative)->get('/campaigns')->assertForbidden();
+        $this->actingAs($creative)->post('/team', [
+            'name' => 'Blocked',
+            'email' => 'blocked@example.com',
+            'password' => 'password',
+            'role_ids' => [$creative->roles()->first()->id],
+        ])->assertForbidden();
     }
 
     public function test_a_manager_cannot_remove_their_own_account(): void

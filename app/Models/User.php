@@ -108,11 +108,15 @@ class User extends Authenticatable
             return true;
         }
 
-        $this->loadMissing('roles.permissions');
+        $owned = array_fill_keys($this->permissionSlugs(), true);
 
-        return $this->roles
-            ->flatMap(fn (Role $role) => $role->permissions)
-            ->contains('slug', $slug);
+        foreach (\App\Support\PageAccess::acceptedAs($slug) as $candidate) {
+            if (isset($owned[$candidate])) {
+                return true;
+            }
+        }
+
+        return isset($owned[$slug]);
     }
 
     /**
@@ -178,6 +182,8 @@ class User extends Authenticatable
     }
 
     /**
+     * Pages the user may publish to (explicitly linked pages).
+     *
      * @return list<int>
      */
     public function accessibleSocialAccountIds(): array
@@ -189,5 +195,27 @@ class User extends Authenticatable
         $this->loadMissing('socialAccounts');
 
         return $this->socialAccounts->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * Pages the user may see on calendars / posting schedule (brand-wide when they can view any content).
+     *
+     * @return list<int>
+     */
+    public function visibleSocialAccountIds(): array
+    {
+        if ($this->isAdmin()) {
+            return SocialAccount::query()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        if ($this->hasPermission('content.view.any')) {
+            return SocialAccount::query()
+                ->whereIn('brand_id', $this->accessibleBrandIds() ?: [0])
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+
+        return $this->accessibleSocialAccountIds();
     }
 }

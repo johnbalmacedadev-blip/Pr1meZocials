@@ -16,6 +16,7 @@ use App\Http\Controllers\PostingScheduleController;
 use App\Http\Controllers\SocialPostingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ResourceLinkController;
+use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\SavedViewController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
@@ -103,6 +104,10 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/team', [TeamController::class, 'index'])->name('team.index');
     Route::post('/team', [TeamController::class, 'store'])->name('team.store');
+    Route::put('/team/roles/{role}/permissions', [RolePermissionController::class, 'update'])->name('team.roles.permissions');
+    Route::post('/team/permission-presets', [RolePermissionController::class, 'storePreset'])->name('team.permission-presets.store');
+    Route::post('/team/roles/{role}/presets/{preset}', [RolePermissionController::class, 'applyPreset'])->name('team.roles.presets.apply');
+    Route::delete('/team/permission-presets/{preset}', [RolePermissionController::class, 'destroyPreset'])->name('team.permission-presets.destroy');
     Route::put('/team/{user}', [TeamController::class, 'update'])->name('team.update');
     Route::delete('/team/{user}', [TeamController::class, 'destroy'])->name('team.destroy');
     Route::get('/team/{user}', [TeamController::class, 'show'])->name('team.show');

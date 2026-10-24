@@ -53,15 +53,15 @@ class PostingScheduleController extends Controller
             ->orderBy('title')
             ->get(['id', 'title', 'reference_number', 'status_id']);
 
-        $accessiblePageIds = $user->accessibleSocialAccountIds();
+        $visiblePageIds = $user->visibleSocialAccountIds();
 
         $facebookPosts = SocialPost::query()
             ->with(['account:id,name,external_id', 'user:id,name'])
-            ->whereHas('account', function ($query) use ($user, $accessiblePageIds) {
+            ->whereHas('account', function ($query) use ($user, $visiblePageIds) {
                 $query->whereHas('platform', fn ($platform) => $platform->where('slug', 'facebook'));
                 if (! $user->isAdmin()) {
                     $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0])
-                        ->whereIn('id', $accessiblePageIds ?: [0]);
+                        ->whereIn('id', $visiblePageIds ?: [0]);
                 }
             })
             ->where(function ($query) use ($week) {

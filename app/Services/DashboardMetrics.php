@@ -243,15 +243,15 @@ class DashboardMetrics
      */
     private function facebookPostsQuery(User $user, array $filters): Builder
     {
-        $accessiblePageIds = $user->accessibleSocialAccountIds();
+        $visiblePageIds = $user->visibleSocialAccountIds();
 
         return SocialPost::query()
-            ->whereHas('account', function (Builder $query) use ($user, $filters, $accessiblePageIds) {
+            ->whereHas('account', function (Builder $query) use ($user, $filters, $visiblePageIds) {
                 $query->whereHas('platform', fn (Builder $platform) => $platform->where('slug', 'facebook'));
 
                 if (! $user->isAdmin()) {
                     $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0])
-                        ->whereIn('id', $accessiblePageIds ?: [0]);
+                        ->whereIn('id', $visiblePageIds ?: [0]);
                 }
 
                 if (! empty($filters['brand_id'])) {

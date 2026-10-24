@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\TaskNoteController;
 use App\Models\Brand;
 use App\Models\ContentItem;
+use App\Models\PermissionPreset;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\WorkflowStatus;
 use App\Support\ContentPresenter;
+use App\Support\PageAccess;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -70,13 +72,51 @@ class TeamController extends Controller
             ];
         })->values();
 
+        $roleModels = Role::query()
+            ->with('permissions:id,slug')
+            ->when(! $request->user()->isAdmin(), fn (Builder $query) => $query->where('slug', '!=', 'administrator'))
+            ->orderBy('name')
+            ->get();
+
+        $canManageMembers = $request->user()->hasPermission('team.create')
+            || $request->user()->hasPermission('team.update')
+            || $request->user()->hasPermission('users.manage');
+
+        $canManageRoles = $request->user()->isAdmin()
+            || $request->user()->hasPermission('users.manage')
+            || $request->user()->hasPermission('settings.manage')
+            || $request->user()->hasPermission('settings.update');
+
         return Inertia::render('Team/Index', [
             'members' => $members,
-            'roles' => Role::query()
-                ->when(! $request->user()->isAdmin(), fn (Builder $query) => $query->where('slug', '!=', 'administrator'))
+            'roles' => $roleModels->map(fn (Role $role) => [
+                'id' => $role->id,
+                'name' => $role->name,
+                'slug' => $role->slug,
+                'description' => $role->description,
+                ...PageAccess::decode($role->permissions->pluck('slug')->all()),
+            ])->values(),
+            'canManage' => $canManageMembers,
+            'canManageRoles' => $canManageRoles,
+            'pageAccess' => [
+                'pages' => PageAccess::pages(),
+                'actions' => PageAccess::actionLabels(),
+                'extras' => PageAccess::extras(),
+            ],
+            'presets' => PermissionPreset::query()
+                ->orderByDesc('is_system')
                 ->orderBy('name')
-                ->get(['id', 'name']),
-            'canManage' => $request->user()->hasPermission('team.view'),
+                ->get()
+                ->map(fn (PermissionPreset $preset) => [
+                    'id' => $preset->id,
+                    'name' => $preset->name,
+                    'slug' => $preset->slug,
+                    'description' => $preset->description,
+                    'matrix' => $preset->matrix ?? [],
+                    'extras' => $preset->extras ?? [],
+                    'is_system' => $preset->is_system,
+                ])
+                ->values(),
             'filters' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
         ]);
     }
@@ -180,7 +220,12 @@ class TeamController extends Controller
 
     private function authorizeManage(Request $request): void
     {
-        abort_unless($request->user()->hasPermission('team.view'), 403);
+        abort_unless(
+            $request->user()->hasPermission('team.create')
+            || $request->user()->hasPermission('team.update')
+            || $request->user()->hasPermission('users.manage'),
+            403
+        );
     }
 
     private function authorizeMember(Request $request, User $user): void

@@ -1,10 +1,11 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import { addMonths, eachDayOfInterval, endOfWeek, format, isSameMonth, isToday, parseISO, startOfWeek } from 'date-fns';
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Button, EmptyState, Modal, PageHeader, StatusBadge } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
-import { formatDate, visitFilters } from '@/lib/utils';
+import { cn, formatDate, visitFilters } from '@/lib/utils';
 import type { FormOptions, SharedProps } from '@/types';
 
 interface ChartRow { label: string; total: number; slug?: string; color?: string }
@@ -63,21 +64,47 @@ const cards = [
 export default function Dashboard({ metrics, filters, options, schedule }: { metrics: Metrics; filters: Record<string, string>; options: FormOptions; schedule: Schedule }) {
     const canCreate = usePage<SharedProps>().props.auth.user?.permissions.includes('content.create');
     const [scheduleOpen, setScheduleOpen] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
     const scheduleFilters = { ...filters, from: metrics.period.from, to: metrics.period.to };
 
     return (
         <AppLayout>
             <Head title="Dashboard" />
             <PageHeader title="Operations dashboard" description="Current pipeline counts are a snapshot. Output, turnaround, and performance use the selected period." />
-            <form className="mb-5 grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 md:grid-cols-6" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); visitFilters('/dashboard', Object.fromEntries(data.entries()) as Record<string, string>); }}>
-                <label className="text-sm">From<input className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" type="date" name="from" defaultValue={metrics.period.from} /></label>
-                <label className="text-sm">To<input className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" type="date" name="to" defaultValue={metrics.period.to} /></label>
-                <label className="text-sm">Brand<select className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" name="brand_id" defaultValue={filters.brand_id ?? ''}><option value="">All</option>{options.brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></label>
-                <label className="text-sm">Campaign<select className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" name="campaign_id" defaultValue={filters.campaign_id ?? ''}><option value="">All</option>{options.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
-                <label className="text-sm">Owner<select className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" name="user_id" defaultValue={filters.user_id ?? ''}><option value="">All</option>{options.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
-                <div className="flex items-end"><button className="h-9 rounded-lg bg-zinc-900 px-3 text-sm text-white" type="submit">Apply</button></div>
-                <input type="hidden" name="month" value={schedule.month} />
-            </form>
+            <section className="mb-5 rounded-xl border border-zinc-200 bg-white">
+                <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left md:hidden"
+                    aria-expanded={filtersOpen}
+                    onClick={() => setFiltersOpen((open) => !open)}
+                >
+                    <span>
+                        <span className="block text-sm font-semibold text-zinc-900">Date filter</span>
+                        <span className="block text-xs text-zinc-500">{formatDate(metrics.period.from)} – {formatDate(metrics.period.to)}</span>
+                    </span>
+                    <ChevronDown className={cn('h-4 w-4 shrink-0 text-zinc-500 transition-transform', filtersOpen && 'rotate-180')} />
+                </button>
+                <form
+                    className={cn(
+                        'grid gap-3 border-t border-zinc-100 p-4 md:grid-cols-6 md:border-0',
+                        filtersOpen ? 'grid' : 'hidden md:grid',
+                    )}
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        const data = new FormData(event.currentTarget);
+                        visitFilters('/dashboard', Object.fromEntries(data.entries()) as Record<string, string>);
+                    }}
+                >
+                    <p className="hidden text-sm font-semibold text-zinc-900 md:col-span-6 md:block">Date filter</p>
+                    <label className="text-sm">From<input className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" type="date" name="from" defaultValue={metrics.period.from} /></label>
+                    <label className="text-sm">To<input className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" type="date" name="to" defaultValue={metrics.period.to} /></label>
+                    <label className="text-sm">Brand<select className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" name="brand_id" defaultValue={filters.brand_id ?? ''}><option value="">All</option>{options.brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select></label>
+                    <label className="text-sm">Campaign<select className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" name="campaign_id" defaultValue={filters.campaign_id ?? ''}><option value="">All</option>{options.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
+                    <label className="text-sm">Owner<select className="mt-1 w-full rounded-lg border border-zinc-300 px-2 py-1.5" name="user_id" defaultValue={filters.user_id ?? ''}><option value="">All</option>{options.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+                    <div className="flex items-end"><button className="h-9 rounded-lg bg-zinc-900 px-3 text-sm text-white" type="submit">Apply</button></div>
+                    <input type="hidden" name="month" value={schedule.month} />
+                </form>
+            </section>
             <section className="mb-5 rounded-xl border border-zinc-200 bg-white p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>

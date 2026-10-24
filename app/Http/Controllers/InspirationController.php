@@ -39,7 +39,7 @@ class InspirationController extends Controller
                 'prev' => $items->previousPageUrl(),
                 'next' => $items->nextPageUrl(),
             ],
-            'canSave' => $request->user()->hasPermission('content.create'),
+            'canSave' => $request->user()->hasPermission('inspiration.create') || $request->user()->hasPermission('content.create'),
             'archived' => $archived,
         ]);
     }
@@ -100,8 +100,11 @@ class InspirationController extends Controller
 
     private function authorizeBoard(Request $request, string $action): void
     {
-        $permission = $action === 'create' ? 'content.create' : 'content.view';
-        $allowed = $request->user()->hasPermission($permission) || $request->user()->hasPermission('content.view.any');
+        $pagePermission = $action === 'create' ? 'inspiration.create' : 'inspiration.view';
+        $legacy = $action === 'create' ? 'content.create' : 'content.view';
+        $allowed = $request->user()->hasPermission($pagePermission)
+            || $request->user()->hasPermission($legacy)
+            || $request->user()->hasPermission('content.view.any');
 
         abort_unless($allowed, 403);
     }

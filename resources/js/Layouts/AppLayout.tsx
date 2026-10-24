@@ -13,16 +13,16 @@ import type { SharedProps } from '@/types';
 const nav = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: () => true },
     { href: '/content', label: 'Content Ideas', icon: Lightbulb, show: (can: Can) => can('content.view') || can('content.view.any') },
-    { href: '/inspiration', label: 'Inspiration', icon: Sparkles, show: (can: Can) => can('content.view') || can('content.view.any') || can('content.create') },
-    { href: '/resources', label: 'Creative Assets', icon: FolderOpen, show: (can: Can) => can('content.view') || can('content.view.any') || can('content.create') },
-    { href: '/board', label: 'Production Board', icon: Columns3, show: (can: Can) => can('content.view') || can('content.view.any') },
-    { href: '/calendar', label: 'Content Calendar', icon: CalendarDays, show: (can: Can) => can('content.view') || can('content.view.any') },
-    { href: '/posting-schedule', label: 'Posting Schedule', icon: CalendarRange, show: (can: Can) => can('content.view') || can('content.view.any') },
-    { href: '/posting', label: 'Posting', icon: Send, show: (can: Can) => can('content.publish') },
+    { href: '/inspiration', label: 'Inspiration', icon: Sparkles, show: (can: Can) => can('inspiration.view') || can('content.view') || can('content.view.any') || can('content.create') },
+    { href: '/resources', label: 'Creative Assets', icon: FolderOpen, show: (can: Can) => can('resources.view') || can('assets.view') || can('content.view') || can('content.view.any') || can('content.create') },
+    { href: '/board', label: 'Production Board', icon: Columns3, show: (can: Can) => can('board.view') || can('content.view') || can('content.view.any') },
+    { href: '/calendar', label: 'Content Calendar', icon: CalendarDays, show: (can: Can) => can('calendar.view') || can('content.view') || can('content.view.any') },
+    { href: '/posting-schedule', label: 'Posting Schedule', icon: CalendarRange, show: (can: Can) => can('posting_schedule.view') || can('content.view') || can('content.view.any') },
+    { href: '/posting', label: 'Posting', icon: Send, show: (can: Can) => can('posting.view') || can('posting.create') || can('content.publish') },
     { href: '/campaigns', label: 'Campaigns', icon: Megaphone, show: (can: Can) => can('campaigns.view') },
     { href: '/team', label: 'Team', icon: Users, show: (can: Can) => can('team.view') },
     { href: '/performance', label: 'Performance', icon: BarChart3, show: (can: Can) => can('performance.view') || can('reports.view') },
-    { href: '/settings', label: 'Settings', icon: Settings, show: (can: Can) => can('users.view') || can('users.manage') || can('brands.manage') || can('settings.manage') || can('taxonomy.manage') || can('tags.manage') || can('platforms.manage') || can('workflow.manage') },
+    { href: '/settings', label: 'Settings', icon: Settings, show: (can: Can) => can('settings.view') || can('settings.update') || can('settings.manage') || can('brands.manage') || can('users.manage') || can('taxonomy.manage') || can('tags.manage') || can('platforms.manage') || can('workflow.manage') },
 ];
 
 type Can = (permission: string) => boolean;
@@ -129,7 +129,7 @@ export default function AppLayout({ title, children }: { title?: string; childre
                 <header className="sticky top-0 z-30 border-b border-zinc-200/80 bg-white/90 px-3 py-2.5 backdrop-blur-md supports-[backdrop-filter]:bg-white/80 lg:px-4 lg:py-3">
                     <div className="flex items-center gap-2 sm:gap-3">
                         <Link href="/dashboard" className="shrink-0 lg:hidden" aria-label="Home">
-                            <Logo className="h-8" />
+                            <Logo variant="mark" className="h-8 w-8" />
                         </Link>
                         <form onSubmit={search} className="relative min-w-0 flex-1">
                             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />

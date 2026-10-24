@@ -75,14 +75,15 @@ class AuthenticatedSessionController extends Controller
         }
 
         if (str_starts_with($path, '/settings')) {
-            return ! $user->hasPermission('users.view')
+            return ! $user->hasPermission('settings.view')
+                && ! $user->hasPermission('settings.update')
+                && ! $user->hasPermission('settings.manage')
                 && ! $user->hasPermission('users.manage')
                 && ! $user->hasPermission('brands.manage')
                 && ! $user->hasPermission('platforms.manage')
                 && ! $user->hasPermission('workflow.manage')
                 && ! $user->hasPermission('taxonomy.manage')
-                && ! $user->hasPermission('tags.manage')
-                && ! $user->hasPermission('settings.manage');
+                && ! $user->hasPermission('tags.manage');
         }
 
         return false;

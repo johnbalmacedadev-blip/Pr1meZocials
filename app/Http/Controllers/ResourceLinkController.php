@@ -206,7 +206,10 @@ class ResourceLinkController extends Controller
 
     private function authorizeBoard(Request $request): void
     {
-        $allowed = $request->user()->hasPermission('content.view') || $request->user()->hasPermission('content.view.any');
+        $allowed = $request->user()->hasPermission('resources.view')
+            || $request->user()->hasPermission('assets.view')
+            || $request->user()->hasPermission('content.view')
+            || $request->user()->hasPermission('content.view.any');
 
         abort_unless($allowed, 403);
     }

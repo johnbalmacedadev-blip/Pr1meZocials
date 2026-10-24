@@ -3,8 +3,11 @@
 namespace Database\Seeders;
 
 use App\Models\Permission;
+use App\Models\PermissionPreset;
 use App\Models\Role;
+use App\Support\PageAccess;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Schema;
 
 class RolePermissionSeeder extends Seeder
 {
@@ -44,6 +47,14 @@ class RolePermissionSeeder extends Seeder
             'reports.view' => ['View operational reports', 'Reports'],
         ];
 
+        foreach (PageAccess::pages() as $page) {
+            foreach ($page['actions'] as $action) {
+                $slug = PageAccess::slug($page['key'], $action);
+                $label = (PageAccess::actionLabels()[$action] ?? ucfirst($action)).' '.$page['label'];
+                $definitions[$slug] = [$label, 'Pages'];
+            }
+        }
+
         foreach ($definitions as $slug => [$name, $group]) {
             Permission::query()->updateOrCreate(['slug' => $slug], ['name' => $name, 'group' => $group]);
         }
@@ -54,47 +65,22 @@ class RolePermissionSeeder extends Seeder
             'administrator' => [
                 'name' => 'Administrator',
                 'description' => 'Manages users, brands, workflow, and every record.',
-                'permissions' => $all->keys()->all(),
             ],
             'marketing_manager' => [
                 'name' => 'Marketing Manager',
                 'description' => 'Plans campaigns, assigns work, approves creative, and reads performance.',
-                'permissions' => [
-                    'users.view', 'brands.view', 'brands.manage', 'taxonomy.manage', 'tags.manage',
-                    'campaigns.view', 'campaigns.manage', 'content.view', 'content.view.any', 'content.create',
-                    'content.update', 'content.update.any', 'content.delete', 'content.archive', 'content.assign',
-                    'content.transition', 'content.approve', 'content.publish', 'content.export',
-                    'assets.view', 'assets.upload', 'assets.delete', 'performance.view', 'performance.manage',
-                    'comments.create', 'team.view', 'reports.view',
-                ],
             ],
             'social_media_manager' => [
                 'name' => 'Social Media Manager',
                 'description' => 'Builds ideas, coordinates platform versions, and schedules publishing.',
-                'permissions' => [
-                    'users.view', 'brands.view', 'tags.manage', 'campaigns.view', 'campaigns.manage',
-                    'content.view', 'content.view.any', 'content.create', 'content.update', 'content.update.any',
-                    'content.delete', 'content.archive', 'content.assign', 'content.transition', 'content.publish', 'content.export',
-                    'assets.view', 'assets.upload', 'performance.view', 'performance.manage',
-                    'comments.create', 'team.view', 'reports.view',
-                ],
             ],
             'creative' => [
                 'name' => 'Creative Team',
-                'description' => 'Produces assigned creative work and submits it for review.',
-                'permissions' => [
-                    'brands.view', 'campaigns.view', 'content.view', 'content.create', 'content.update',
-                    'content.transition', 'assets.view', 'assets.upload', 'performance.view',
-                    'comments.create', 'reports.view',
-                ],
+                'description' => 'Sees major brand pages (except Settings and Campaigns); produces assigned creative work.',
             ],
             'reviewer' => [
                 'name' => 'Reviewer',
                 'description' => 'Approves work or sends it back with a required explanation.',
-                'permissions' => [
-                    'brands.view', 'campaigns.view', 'content.view', 'content.transition', 'content.approve',
-                    'assets.view', 'comments.create', 'performance.view', 'reports.view',
-                ],
             ],
         ];
 
@@ -104,7 +90,26 @@ class RolePermissionSeeder extends Seeder
                 ['name' => $role['name'], 'description' => $role['description']],
             );
 
-            $model->permissions()->sync($all->only($role['permissions'])->values());
+            $defaults = PageAccess::defaultForRole($slug);
+            $permissionSlugs = $slug === 'administrator'
+                ? $all->keys()->all()
+                : PageAccess::expand($defaults['matrix'], $defaults['extras']);
+
+            $model->permissions()->sync($all->only($permissionSlugs)->values());
+
+            if (Schema::hasTable('permission_presets')) {
+                PermissionPreset::query()->updateOrCreate(
+                    ['slug' => 'system-'.$slug],
+                    [
+                        'name' => $role['name'].' default',
+                        'description' => $role['description'],
+                        'matrix' => $defaults['matrix'],
+                        'extras' => $defaults['extras'],
+                        'is_system' => true,
+                        'created_by' => null,
+                    ],
+                );
+            }
         }
     }
 }

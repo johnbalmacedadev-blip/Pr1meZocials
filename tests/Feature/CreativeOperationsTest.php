@@ -281,6 +281,40 @@ class CreativeOperationsTest extends TestCase
         ])->assertForbidden();
     }
 
+    public function test_creative_team_can_view_brand_calendars_board_schedule_and_ideas(): void
+    {
+        $brand = $this->makeBrand('Studio');
+        $manager = $this->makeUser('marketing_manager', $brand);
+        $creative = $this->makeUser('creative', $brand);
+
+        $this->actingAs($manager)->post('/content', [
+            'title' => 'Unassigned brand idea',
+            'brand_id' => $brand->id,
+            'format' => 'photo',
+        ])->assertRedirect();
+
+        $item = ContentItem::query()->where('title', 'Unassigned brand idea')->firstOrFail();
+
+        $this->assertTrue($creative->fresh()->hasPermission('content.view.any'));
+
+        $this->actingAs($creative)->get('/content')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Content/Index')
+            ->where('content.data', fn ($rows) => collect($rows)->contains(fn ($row) => $row['id'] === $item->id))
+        );
+
+        $this->actingAs($creative)->get('/board')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('cards', fn ($cards) => collect($cards)->contains(fn ($card) => $card['id'] === $item->id))
+        );
+
+        $this->actingAs($creative)->get('/calendar')->assertOk();
+        $this->actingAs($creative)->get('/posting-schedule')->assertOk();
+        $this->actingAs($creative)->get('/performance')->assertOk();
+        $this->actingAs($creative)->get('/inspiration')->assertOk();
+
+        $this->actingAs($creative)->get("/content/{$item->id}")->assertOk();
+        $this->actingAs($creative)->get("/content/{$item->id}/edit")->assertForbidden();
+    }
+
     public function test_dashboard_is_empty_until_records_exist_and_notifications_are_not_duplicated(): void
     {
         $brand = $this->makeBrand();
