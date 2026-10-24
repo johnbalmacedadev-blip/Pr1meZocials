@@ -1,13 +1,16 @@
+DirectoryIndex index.php public/index.php
+
 <IfModule mod_rewrite.c>
-    Options -Indexes +FollowSymLinks
     RewriteEngine On
 
-    # Shared hosting often points the site/subdirectory at the project root.
-    # Laravel's front controller lives in /public — send all traffic there.
-    RewriteRule ^(.*)$ public/$1 [L]
-</IfModule>
+    # Already inside /public — stop rewriting (avoids loops on shared hosting).
+    RewriteRule ^public/ - [L]
 
-<IfModule !mod_rewrite.c>
-    Options -Indexes
-    DirectoryIndex public/index.php
+    # Existing files/folders at project root (e.g. this index.php) can be served.
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Everything else goes through Laravel's public front controller.
+    RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
