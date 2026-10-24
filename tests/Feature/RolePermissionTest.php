@@ -90,4 +90,29 @@ class RolePermissionTest extends TestCase
         $this->assertFalse($creative->hasPermission('settings.manage'));
         $this->assertFalse($creative->hasPermission('posting.create'));
     }
+
+    public function test_permission_catalog_seed_does_not_wipe_saved_role_matrix(): void
+    {
+        $brand = $this->makeBrand();
+        $manager = $this->makeUser('marketing_manager', $brand);
+        $creative = Role::query()->where('slug', 'creative')->firstOrFail();
+
+        $this->actingAs($manager)->put('/team/roles/'.$creative->id.'/permissions', [
+            'matrix' => [
+                'content' => ['view'],
+                'board' => ['view'],
+                'campaigns' => ['view'],
+                'settings' => [],
+            ],
+            'extras' => ['content.view.any'],
+        ])->assertRedirect();
+
+        $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\PermissionCatalogSeeder', '--force' => true]);
+
+        $creative->load('permissions');
+        $slugs = $creative->permissions->pluck('slug')->all();
+        $this->assertContains('campaigns.view', $slugs);
+        $this->assertContains('content.view', $slugs);
+        $this->assertNotContains('settings.view', $slugs);
+    }
 }

@@ -190,7 +190,7 @@ class PageAccess
             $matrix[$page['key']] = [];
             foreach ($page['actions'] as $action) {
                 $primary = self::slug($page['key'], $action);
-                if (isset($set[$primary])) {
+                if (isset($set[$primary]) || self::legacyImplies($set, $page['key'], $action)) {
                     $matrix[$page['key']][] = $action;
                 }
             }
@@ -204,6 +204,31 @@ class PageAccess
         }
 
         return ['matrix' => $matrix, 'extras' => $extras];
+    }
+
+    /**
+     * @param  array<string, true>  $set
+     */
+    private static function legacyImplies(array $set, string $page, string $action): bool
+    {
+        // Only treat legacy capability slugs as page checks when the primary page slug is absent,
+        // and only for pages whose action maps 1:1 to that capability (avoid marking every content
+        // surface checked just because content.view exists).
+        return match ($page.'.'.$action) {
+            'content.view' => isset($set['content.view']) || isset($set['content.view.any']),
+            'content.create' => isset($set['content.create']),
+            'content.update' => isset($set['content.update']) || isset($set['content.update.any']),
+            'content.delete' => isset($set['content.delete']),
+            'campaigns.view' => isset($set['campaigns.view']),
+            'campaigns.create', 'campaigns.update', 'campaigns.delete' => isset($set['campaigns.manage']),
+            'team.view' => isset($set['team.view']),
+            'team.create', 'team.update', 'team.delete' => isset($set['users.manage']),
+            'performance.view' => isset($set['performance.view']) || isset($set['reports.view']),
+            'performance.create', 'performance.delete' => isset($set['performance.manage']),
+            'settings.view' => isset($set['settings.manage']),
+            'settings.update' => isset($set['settings.manage']) && isset($set['brands.manage']),
+            default => false,
+        };
     }
 
     /**
