@@ -513,13 +513,13 @@ class FacebookPublisher
 
     private function assertReady(?SocialAccount $account): void
     {
-        if (! $account || ! $account->is_active) {
-            throw new RuntimeException('Choose an active Facebook page first.');
+        if (! $account) {
+            throw new RuntimeException('Choose a Facebook page first.');
         }
 
         if (! filled($account->external_id) || ! filled($account->access_token)) {
             throw new RuntimeException(
-                'This Facebook page is missing a Page ID or access token. Open Page settings, Connect with Meta, then click Refresh pages so tokens are loaded automatically.'
+                'This Facebook page is missing a Page ID or access token. An admin or manager must Connect with Meta and Refresh pages so tokens load automatically.'
             );
         }
     }

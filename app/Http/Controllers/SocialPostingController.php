@@ -572,16 +572,12 @@ class SocialPostingController extends Controller
      */
     /**
      * Who may connect/refresh Meta and toggle page Active.
-     * Publishers still post with shared page tokens without a personal Facebook login.
+     * Creative publishers never need this — they use shared workspace page tokens.
      */
     private function canManageMeta(User $user): bool
     {
         if ($user->isAdmin()) {
             return true;
-        }
-
-        if (! $user->hasPermission('content.publish')) {
-            return false;
         }
 
         if (
@@ -593,17 +589,13 @@ class SocialPostingController extends Controller
             return true;
         }
 
-        // Keep refresh available for whoever originally connected Meta.
-        if ($user->hasFacebookConnection()) {
+        // Social / marketing managers set up Meta for the workspace.
+        if ($user->hasRole('social_media_manager') || $user->hasRole('marketing_manager')) {
             return true;
         }
 
-        // First-time workspace setup only — once pages have tokens, teammates post without connecting.
-        return ! SocialAccount::query()
-            ->whereIn('brand_id', $user->accessibleBrandIds() ?: [0])
-            ->whereHas('platform', fn ($query) => $query->where('slug', 'facebook'))
-            ->get()
-            ->contains(fn (SocialAccount $account) => $account->isFacebookReady());
+        // Anyone who already connected Meta can refresh their token.
+        return $user->hasPermission('content.publish') && $user->hasFacebookConnection();
     }
 
     private function presentPost(SocialPost $post): array

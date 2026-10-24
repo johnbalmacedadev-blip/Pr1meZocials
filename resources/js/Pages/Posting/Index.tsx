@@ -126,8 +126,14 @@ export default function PostingIndex({
 }) {
     const basePath = usePage<SharedProps>().props.basePath ?? '';
     const managedPages = useMemo(
-        () => pages.filter((page) => page.is_active && page.is_ready && page.can_post !== false),
-        [pages],
+        () => pages.filter((page) => {
+            if (! page.is_ready || page.can_post === false) {
+                return false;
+            }
+            // Managers honor Active toggle; creative publishers use any ready shared page.
+            return canManagePages ? page.is_active : true;
+        }),
+        [pages, canManagePages],
     );
     const hasAnyPages = pages.length > 0;
     const pagesNeedingToken = useMemo(() => pages.filter((page) => !page.is_ready), [pages]);
@@ -513,18 +519,18 @@ export default function PostingIndex({
                                     {pagesNeedingToken.length > 0
                                         ? canManageMeta
                                             ? 'Your Facebook Pages are listed, but Page ID/access tokens are missing or expired. Open Page settings, Connect with Meta, then Refresh pages — those values fill in automatically from Meta (you never type them).'
-                                            : 'Facebook Pages need a fresh connection from an admin or manager. Ask them to reconnect Meta in Page settings — you can post with the shared workspace pages after that.'
+                                            : 'Shared Facebook pages need a fresh token from an admin or manager. You do not need to connect your own Facebook account.'
                                         : hasAnyPages
                                             ? canManageMeta
                                                 ? 'No active pages yet. Mark at least one Connected page Active in Page settings.'
-                                                : 'No pages are Active for posting yet. Ask an admin or manager to turn a page Active in Page settings.'
-                                            : workspacePagesReady || metaConnected
-                                                ? 'No Pages loaded for your brands yet. Ask an admin or manager to refresh Facebook pages.'
+                                                : 'Shared Facebook pages are here but not ready yet. Ask an admin or manager to finish Page settings — then they will appear here automatically.'
+                                            : brands.length === 0
+                                                ? 'Your account has no brand assigned yet. Ask an admin to add you to a brand that has Facebook pages.'
                                                 : canManageMeta
-                                                    ? 'Connect with Meta in Page settings to load the Pages you manage. Page ID and access token are filled automatically.'
-                                                    : 'Posting uses the shared Facebook pages set up by an admin. Ask them to connect Meta once — you do not need your own Facebook login.'}
+                                                    ? 'Connect with Meta in Page settings once for this workspace. After pages load, your team can post without each person connecting Facebook.'
+                                                    : 'No shared Facebook pages are available for your brands yet. After an admin connects Meta once, those pages will show here automatically — you do not need to connect Facebook yourself.'}
                                 </p>
-                                {(canManageMeta || hasAnyPages) && (
+                                {canManageMeta && (
                                     <Button type="button" variant="secondary" onClick={() => setTab('pages')}>
                                         Open Page settings
                                     </Button>
