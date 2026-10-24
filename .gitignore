@@ -6,6 +6,7 @@
 /storage/pail
 /storage/framework/install.lock
 /storage/logs/*.log
+/storage/app/facebook-credentials.json
 # Production .env is committed for pull-and-run shared hosting.
 # Keep machine-specific overrides in .env.local (copy over .env locally when developing).
 .env.local

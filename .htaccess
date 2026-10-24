@@ -1,5 +1,11 @@
 DirectoryIndex index.php
 
+# Allow common verbs through to PHP. Real PUT/PATCH/DELETE are still spoofed as
+# POST+_method in the Inertia client because some cPanel hosts 403 those verbs.
+<IfModule mod_authz_core.c>
+    Require all granted
+</IfModule>
+
 <IfModule mod_rewrite.c>
     RewriteEngine On
 

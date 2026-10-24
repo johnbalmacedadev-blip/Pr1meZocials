@@ -7,6 +7,7 @@ use App\Models\Platform;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
+use App\Support\FacebookCredentials;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -17,16 +18,16 @@ class FacebookPublisher
 {
     public function oauthUrl(string $state): string
     {
-        $appId = (string) config('facebook.app_id');
+        $appId = FacebookCredentials::appId();
         if ($appId === '') {
-            throw new RuntimeException('Set FACEBOOK_APP_ID in your .env file.');
+            throw new RuntimeException('Set your Facebook App ID in Page settings (or FACEBOOK_APP_ID in .env).');
         }
 
         $scopes = implode(',', config('facebook.scopes', []));
 
         return 'https://www.facebook.com/'.config('facebook.graph_version', 'v21.0').'/dialog/oauth?'.http_build_query([
             'client_id' => $appId,
-            'redirect_uri' => config('facebook.redirect_uri'),
+            'redirect_uri' => FacebookCredentials::redirectUri(),
             'state' => $state,
             'scope' => $scopes,
             'response_type' => 'code',
@@ -38,17 +39,17 @@ class FacebookPublisher
      */
     public function exchangeCodeForUserToken(string $code): array
     {
-        $appId = (string) config('facebook.app_id');
-        $secret = (string) config('facebook.app_secret');
+        $appId = FacebookCredentials::appId();
+        $secret = FacebookCredentials::appSecret();
 
         if ($appId === '' || $secret === '') {
-            throw new RuntimeException('Set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET in your .env file.');
+            throw new RuntimeException('Set your Facebook App ID and App Secret in Page settings (or .env).');
         }
 
         $short = $this->graph()->get('/oauth/access_token', [
             'client_id' => $appId,
             'client_secret' => $secret,
-            'redirect_uri' => config('facebook.redirect_uri'),
+            'redirect_uri' => FacebookCredentials::redirectUri(),
             'code' => $code,
         ]);
 

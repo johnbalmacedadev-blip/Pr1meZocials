@@ -8,10 +8,12 @@ use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Services\FacebookPublisher;
 use App\Services\NotificationService;
+use App\Support\FacebookCredentials;
 use App\Support\PostingScheduleSlots;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -99,7 +101,9 @@ class SocialPostingController extends Controller
                 'contentOptions' => $contentOptions,
                 'brands' => $user->accessibleBrands()->map->only(['id', 'name'])->values(),
                 'metaConnected' => $user->hasFacebookConnection(),
-                'metaConfigured' => filled(config('facebook.app_id')) && filled(config('facebook.app_secret')),
+                'metaConfigured' => FacebookCredentials::isConfigured(),
+                'metaAppId' => FacebookCredentials::appId(),
+                'metaRedirectUri' => FacebookCredentials::redirectUri(),
                 'canManagePages' => $user->hasPermission('content.publish'),
                 'composeDefaults' => $this->composeDefaults($request),
                 'focus' => [
@@ -121,7 +125,9 @@ class SocialPostingController extends Controller
                 'contentOptions' => [],
                 'brands' => $user->accessibleBrands()->map->only(['id', 'name'])->values(),
                 'metaConnected' => false,
-                'metaConfigured' => filled(config('facebook.app_id')) && filled(config('facebook.app_secret')),
+                'metaConfigured' => FacebookCredentials::isConfigured(),
+                'metaAppId' => FacebookCredentials::appId(),
+                'metaRedirectUri' => FacebookCredentials::redirectUri(),
                 'canManagePages' => $user->hasPermission('content.publish'),
                 'composeDefaults' => $this->composeDefaults($request),
                 'focus' => ['tab' => 'compose', 'post_id' => null],
@@ -130,12 +136,36 @@ class SocialPostingController extends Controller
         }
     }
 
+    public function saveMetaCredentials(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('content.publish'), 403);
+
+        $data = $request->validate([
+            'app_id' => ['required', 'string', 'max:64'],
+            'app_secret' => ['required', 'string', 'max:255'],
+        ]);
+
+        FacebookCredentials::save($data['app_id'], $data['app_secret']);
+
+        return redirect()
+            ->route('posting.index', ['tab' => 'pages'])
+            ->with('success', 'Meta App ID and Secret saved. Click Connect with Meta next — these survive git pulls.');
+    }
+
     public function redirectToFacebook(Request $request, FacebookPublisher $publisher): RedirectResponse
     {
         abort_unless($request->user()->hasPermission('content.publish'), 403);
 
+        if (! FacebookCredentials::isConfigured()) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages'])
+                ->with('error', 'Save your Facebook App ID and App Secret in Page settings first.');
+        }
+
         $state = Str::random(40);
         $request->session()->put('facebook_oauth_state', $state);
+        // Cache backup: shared-hosting file sessions sometimes drop across the Meta redirect.
+        Cache::put('facebook_oauth_state:'.$state, (int) $request->user()->id, now()->addMinutes(20));
 
         try {
             return redirect()->away($publisher->oauthUrl($state));
@@ -152,18 +182,29 @@ class SocialPostingController extends Controller
 
         if ($request->filled('error')) {
             return redirect()
-                ->route('posting.index')
+                ->route('posting.index', ['tab' => 'pages'])
                 ->with('error', (string) $request->input('error_description', 'Meta authorization was cancelled.'));
         }
 
-        $expected = $request->session()->pull('facebook_oauth_state');
-        if (! $request->filled('state') || ! hash_equals((string) $expected, (string) $request->input('state'))) {
-            return redirect()->route('posting.index')->with('error', 'Invalid Meta login state. Try connecting again.');
+        $state = (string) $request->input('state');
+        $expected = (string) $request->session()->pull('facebook_oauth_state');
+        $cachedUserId = $state !== '' ? Cache::pull('facebook_oauth_state:'.$state) : null;
+        $stateOk = $state !== '' && (
+            ($expected !== '' && hash_equals($expected, $state))
+            || ((int) $cachedUserId === (int) $request->user()->id)
+        );
+
+        if (! $stateOk) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages'])
+                ->with('error', 'Invalid Meta login state. Try Connect with Meta again.');
         }
 
         $code = (string) $request->input('code');
         if ($code === '') {
-            return redirect()->route('posting.index')->with('error', 'Meta did not return an authorization code.');
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages'])
+                ->with('error', 'Meta did not return an authorization code.');
         }
 
         try {
@@ -178,17 +219,21 @@ class SocialPostingController extends Controller
 
             $brand = $user->accessibleBrands()->first();
             if (! $brand) {
-                return redirect()->route('posting.index')->with('error', 'Create a brand first, then refresh pages from Meta.');
+                return redirect()
+                    ->route('posting.index', ['tab' => 'pages'])
+                    ->with('error', 'Create a brand first, then refresh pages from Meta.');
             }
 
             $accounts = $publisher->syncManagedPages($user->fresh(), $brand);
         } catch (\Throwable $exception) {
-            return redirect()->route('posting.index')->with('error', $exception->getMessage());
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages'])
+                ->with('error', $exception->getMessage());
         }
 
         return redirect()
-            ->route('posting.index')
-            ->with('success', count($accounts).' Facebook '.str('page')->plural(count($accounts)).' loaded. Pick one to post.');
+            ->route('posting.index', ['tab' => 'pages'])
+            ->with('success', count($accounts).' Facebook '.str('page')->plural(count($accounts)).' loaded. Turn pages Active to post.');
     }
 
     public function refreshPages(Request $request, FacebookPublisher $publisher): RedirectResponse

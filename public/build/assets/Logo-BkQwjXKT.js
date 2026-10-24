@@ -1,1 +1,0 @@
-import{u as o,j as r,af as t}from"./app-KdD26jCs.js";function n({className:s}){const{basePath:a=""}=o().props;return r.jsx("img",{src:`${a}/brand/primez-logo.png`,alt:"pr1meZ",className:t("h-9 w-auto",s)})}export{n as L};

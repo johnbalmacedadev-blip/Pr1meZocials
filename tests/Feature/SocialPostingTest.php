@@ -6,6 +6,7 @@ use App\Models\Platform;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\UserNotification;
+use App\Support\FacebookCredentials;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -137,6 +138,26 @@ class SocialPostingTest extends TestCase
         $this->assertSame(1, UserNotification::query()->where('user_id', $manager->id)->count());
     }
 
+    public function test_publisher_can_save_meta_credentials_outside_env(): void
+    {
+        $brand = $this->makeBrand('Prime Z');
+        $manager = $this->makeUser('social_media_manager', $brand);
+        config(['facebook.app_id' => null, 'facebook.app_secret' => null]);
+        @unlink(FacebookCredentials::path());
+
+        $this->actingAs($manager)
+            ->post('/posting/facebook/credentials', [
+                'app_id' => '2163291234576981',
+                'app_secret' => 'live-app-secret',
+            ])
+            ->assertRedirect(route('posting.index', ['tab' => 'pages']));
+
+        $this->assertTrue(FacebookCredentials::isConfigured());
+        $this->assertSame('2163291234576981', FacebookCredentials::appId());
+        $this->assertSame('live-app-secret', FacebookCredentials::appSecret());
+        @unlink(FacebookCredentials::path());
+    }
+
     public function test_meta_oauth_callback_syncs_all_managed_pages(): void
     {
         $brand = $this->makeBrand('Prime Z');
@@ -169,7 +190,7 @@ class SocialPostingTest extends TestCase
         $this->actingAs($manager)
             ->withSession(['facebook_oauth_state' => 'state-123'])
             ->get('/posting/facebook/callback?code=meta-code&state=state-123')
-            ->assertRedirect(route('posting.index'));
+            ->assertRedirect(route('posting.index', ['tab' => 'pages']));
 
         $manager->refresh();
         $this->assertSame('long-user-token', $manager->facebook_user_token);

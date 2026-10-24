@@ -1,8 +1,9 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { Eye, Heart, ImagePlus, MessageCircle, Pencil, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { EmojiPickerButton } from '@/Components/EmojiPicker';
 import FacebookGlyph from '@/Components/FacebookGlyph';
-import { Button, EmptyState, Field, PageHeader, Select, Textarea } from '@/Components/ui';
+import { Button, EmptyState, Field, Input, PageHeader, Select, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
 import { formatDate, withBase } from '@/lib/utils';
@@ -97,6 +98,8 @@ export default function PostingIndex({
     brands,
     metaConnected,
     metaConfigured,
+    metaAppId = '',
+    metaRedirectUri = '',
     composeDefaults,
     focus,
     loadError = null,
@@ -107,6 +110,8 @@ export default function PostingIndex({
     brands: BrandOption[];
     metaConnected: boolean;
     metaConfigured: boolean;
+    metaAppId?: string;
+    metaRedirectUri?: string;
     canManagePages: boolean;
     composeDefaults?: ComposeDefaults | null;
     focus?: { tab?: TabId | null; post_id?: number | null } | null;
@@ -151,6 +156,7 @@ export default function PostingIndex({
     const [dragging, setDragging] = useState(false);
     const [editingPostId, setEditingPostId] = useState<number | null>(focus?.post_id ?? null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const captionRef = useRef<HTMLTextAreaElement>(null);
     const dragDepth = useRef(0);
     const focusedPostRef = useRef<HTMLLIElement | null>(null);
 
@@ -529,15 +535,27 @@ export default function PostingIndex({
                                         ))}
                                     </Select>
                                 </Field>
-                                <Field label="Caption" error={postForm.errors.caption}>
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-medium text-zinc-800">Caption</span>
+                                        <EmojiPickerButton
+                                            fieldRef={captionRef}
+                                            value={postForm.data.caption}
+                                            onChange={(next) => postForm.setData('caption', next)}
+                                        />
+                                    </div>
                                     <Textarea
+                                        ref={captionRef}
                                         value={postForm.data.caption}
                                         onChange={(event) => postForm.setData('caption', event.target.value)}
                                         required
                                         rows={5}
                                         placeholder="Write the caption for Facebook…"
                                     />
-                                </Field>
+                                    {postForm.errors.caption && (
+                                        <span className="block text-sm text-rose-700">{postForm.errors.caption}</span>
+                                    )}
+                                </div>
                                 <Field label="Link creative content (optional)" error={postForm.errors.content_item_id}>
                                     <Select
                                         value={postForm.data.content_item_id}
@@ -891,11 +909,11 @@ export default function PostingIndex({
                         </p>
                     </div>
 
-                    {!metaConfigured && (
-                        <p className="m-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                            Add <code className="rounded bg-amber-100 px-1">FACEBOOK_APP_ID</code> and <code className="rounded bg-amber-100 px-1">FACEBOOK_APP_SECRET</code> to <code className="rounded bg-amber-100 px-1">.env</code>, and set the OAuth redirect URI in Meta to your live callback URL ending in <code className="rounded bg-amber-100 px-1">/posting/facebook/callback</code>.
-                        </p>
-                    )}
+                    <MetaCredentialsPanel
+                        configured={metaConfigured}
+                        appId={metaAppId}
+                        redirectUri={metaRedirectUri}
+                    />
 
                     {metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
                         <div className="m-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
@@ -905,7 +923,7 @@ export default function PostingIndex({
                                     : `${pagesNeedingToken.length} page${pagesNeedingToken.length === 1 ? '' : 's'} need a fresh Page ID / access token from Meta.`}
                             </p>
                             <p>
-                                You do not enter these by hand. Click <strong>Connect with Meta</strong>, approve access, then <strong>Refresh pages</strong> so every Page gets a new token automatically.
+                                You do not enter Page ID or tokens by hand. Click <strong>Connect with Meta</strong>, approve access — pages and tokens load automatically.
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 <Button type="button" onClick={() => { window.location.href = connectMetaUrl; }}>
@@ -961,6 +979,74 @@ export default function PostingIndex({
     );
 }
 
+function MetaCredentialsPanel({
+    configured,
+    appId,
+    redirectUri,
+}: {
+    configured: boolean;
+    appId: string;
+    redirectUri: string;
+}) {
+    const form = useForm({
+        app_id: appId || '',
+        app_secret: '',
+    });
+
+    function save(event: FormEvent) {
+        event.preventDefault();
+        form.post('/posting/facebook/credentials', {
+            preserveScroll: true,
+            onSuccess: () => form.setData('app_secret', ''),
+        });
+    }
+
+    return (
+        <div className={`m-4 space-y-3 rounded-lg border px-3 py-3 text-sm ${configured ? 'border-zinc-200 bg-zinc-50 text-zinc-800' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+            <div>
+                <p className="font-medium">
+                    {configured ? 'Meta App credentials' : 'Save Meta App ID and Secret'}
+                </p>
+                <p className="mt-1 text-xs opacity-90">
+                    Paste the App ID and App Secret from Meta Developer → your app → Settings → Basic.
+                    Saved here (not only in .env) so a git pull does not wipe them. In Meta, add this exact OAuth redirect URI:
+                </p>
+                {redirectUri ? (
+                    <code className="mt-2 block break-all rounded-md bg-white/80 px-2 py-1.5 text-[11px] text-zinc-900 ring-1 ring-zinc-200">
+                        {redirectUri}
+                    </code>
+                ) : null}
+            </div>
+            <form className="grid gap-2 sm:grid-cols-2" onSubmit={save}>
+                <Field label="App ID" error={form.errors.app_id}>
+                    <Input
+                        value={form.data.app_id}
+                        onChange={(event) => form.setData('app_id', event.target.value)}
+                        placeholder="Facebook App ID"
+                        required
+                        autoComplete="off"
+                    />
+                </Field>
+                <Field label="App Secret" error={form.errors.app_secret}>
+                    <Input
+                        type="password"
+                        value={form.data.app_secret}
+                        onChange={(event) => form.setData('app_secret', event.target.value)}
+                        placeholder={configured ? 'Enter secret to update' : 'Facebook App Secret'}
+                        required
+                        autoComplete="new-password"
+                    />
+                </Field>
+                <div className="sm:col-span-2">
+                    <Button type="submit" size="sm" disabled={form.processing}>
+                        {form.processing ? 'Saving…' : configured ? 'Update credentials' : 'Save credentials'}
+                    </Button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
 function HistoryCaptionEditor({
     post,
     onCancel,
@@ -971,6 +1057,7 @@ function HistoryCaptionEditor({
     onSaved: () => void;
 }) {
     const form = useForm({ caption: post.caption ?? '' });
+    const captionRef = useRef<HTMLTextAreaElement>(null);
 
     function save(event: FormEvent) {
         event.preventDefault();
@@ -982,14 +1069,26 @@ function HistoryCaptionEditor({
 
     return (
         <form className="mt-2 space-y-2 rounded-lg border border-zinc-200 bg-white p-3" onSubmit={save}>
-            <Field label="Caption" error={form.errors.caption}>
+            <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-zinc-800">Caption</span>
+                    <EmojiPickerButton
+                        fieldRef={captionRef}
+                        value={form.data.caption}
+                        onChange={(next) => form.setData('caption', next)}
+                    />
+                </div>
                 <Textarea
+                    ref={captionRef}
                     value={form.data.caption}
                     onChange={(event) => form.setData('caption', event.target.value)}
                     rows={4}
                     required
                 />
-            </Field>
+                {form.errors.caption && (
+                    <span className="block text-sm text-rose-700">{form.errors.caption}</span>
+                )}
+            </div>
             <div className="flex flex-wrap gap-2">
                 <Button type="submit" size="sm" disabled={form.processing}>
                     {form.processing ? 'Saving…' : 'Save on Facebook'}

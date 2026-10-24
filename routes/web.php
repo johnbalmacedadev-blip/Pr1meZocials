@@ -109,6 +109,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/posting', [SocialPostingController::class, 'index'])->name('posting.index');
     Route::post('/posting', [SocialPostingController::class, 'store'])->middleware('throttle:uploads')->name('posting.store');
+    Route::post('/posting/facebook/credentials', [SocialPostingController::class, 'saveMetaCredentials'])->name('posting.facebook.credentials');
     Route::get('/posting/facebook/redirect', [SocialPostingController::class, 'redirectToFacebook'])->name('posting.facebook.redirect');
     Route::get('/posting/facebook/callback', [SocialPostingController::class, 'handleFacebookCallback'])->name('posting.facebook.callback');
     Route::post('/posting/facebook/refresh', [SocialPostingController::class, 'refreshPages'])->name('posting.facebook.refresh');

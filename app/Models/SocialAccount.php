@@ -67,10 +67,9 @@ class SocialAccount extends Model
 
     public function isFacebookReady(): bool
     {
+        // Token readiness is independent of Active/Inactive for the Compose dropdown.
         // Use the decrypted accessor — raw ciphertext can exist after an APP_KEY
         // change even when the token is no longer usable.
-        return $this->is_active
-            && filled($this->external_id)
-            && filled($this->access_token);
+        return filled($this->external_id) && filled($this->access_token);
     }
 }

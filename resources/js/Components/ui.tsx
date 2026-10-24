@@ -3,7 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { X } from 'lucide-react';
-import { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { ButtonHTMLAttributes, forwardRef, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 import { priorityTone, tone } from '@/types';
 
@@ -43,9 +43,9 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
     return <input {...props} className={cn(fieldClass, props.className)} />;
 }
 
-export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-    return <textarea {...props} className={cn(fieldClass, 'min-h-24', props.className)} />;
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea(props, ref) {
+    return <textarea {...props} ref={ref} className={cn(fieldClass, 'min-h-24', props.className)} />;
+});
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
     return <select {...props} className={cn(fieldClass, props.className)} />;

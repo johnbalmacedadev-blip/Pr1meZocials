@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // cPanel / shared hosting often terminates TLS at a proxy.
+        $middleware->trustProxies(at: '*');
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
