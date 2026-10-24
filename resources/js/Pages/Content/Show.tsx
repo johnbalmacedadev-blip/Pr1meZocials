@@ -2,6 +2,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEvent, useState } from 'react';
 import { Button, Field, Input, PageHeader, PriorityBadge, Select, StatusBadge, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
+import { confirmAction } from '@/lib/confirm';
 import { formatBytes, formatDate } from '@/lib/utils';
 import type { FormOptions, SharedProps } from '@/types';
 
@@ -109,7 +110,22 @@ export default function Show({ contentItem, options }: { contentItem: Detail; op
                 actions={(item.abilities.update || item.abilities.delete) ? (
                     <>
                         {item.abilities.update && <Link href={`/content/${item.id}/edit`} className="inline-flex h-10 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm">Edit brief</Link>}
-                        {item.abilities.delete && <Button type="button" variant="danger" onClick={() => { if (confirm(`Move "${item.title}" to trash?`)) router.delete(`/content/${item.id}`); }}>Delete</Button>}
+                        {item.abilities.delete && (
+                            <Button
+                                type="button"
+                                variant="danger"
+                                onClick={async () => {
+                                    const ok = await confirmAction({
+                                        title: 'Move to trash?',
+                                        message: `Move “${item.title}” to trash? You can restore it later from Trash.`,
+                                        confirmLabel: 'Move to trash',
+                                    });
+                                    if (ok) router.delete(`/content/${item.id}`);
+                                }}
+                            >
+                                Delete
+                            </Button>
+                        )}
                     </>
                 ) : undefined}
             />

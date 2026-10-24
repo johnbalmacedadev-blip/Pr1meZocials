@@ -2,7 +2,7 @@
 
 return [
 
-    'upload_max_kb' => (int) env('UPLOAD_MAX_KB', 81920),
+    'upload_max_kb' => (int) env('UPLOAD_MAX_KB', 512000),
 
     'allowed_uploads' => [
         'jpg' => ['image/jpeg'],

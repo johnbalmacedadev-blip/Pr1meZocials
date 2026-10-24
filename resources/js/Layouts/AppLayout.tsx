@@ -1,7 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import {
-    BarChart3, Bell, CalendarDays, Columns3, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, Sparkles, CalendarRange,
+    BarChart3, Bell, CalendarDays, Columns3, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, Send, Sparkles, CalendarRange,
     Menu, Plus, Search, Settings, UserRound, Users, X,
 } from 'lucide-react';
 import { FormEvent, ReactNode, useState } from 'react';
@@ -18,6 +18,7 @@ const nav = [
     { href: '/board', label: 'Production Board', icon: Columns3, show: (can: Can) => can('content.view') || can('content.view.any') },
     { href: '/calendar', label: 'Content Calendar', icon: CalendarDays, show: (can: Can) => can('content.view') || can('content.view.any') },
     { href: '/posting-schedule', label: 'Posting Schedule', icon: CalendarRange, show: (can: Can) => can('content.view') || can('content.view.any') },
+    { href: '/posting', label: 'Posting', icon: Send, show: (can: Can) => can('content.publish') },
     { href: '/campaigns', label: 'Campaigns', icon: Megaphone, show: (can: Can) => can('campaigns.view') },
     { href: '/team', label: 'Team', icon: Users, show: (can: Can) => can('team.view') },
     { href: '/performance', label: 'Performance', icon: BarChart3, show: (can: Can) => can('performance.view') || can('reports.view') },

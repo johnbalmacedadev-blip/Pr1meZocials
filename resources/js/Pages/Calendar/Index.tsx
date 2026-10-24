@@ -7,12 +7,13 @@ import AppLayout from '@/Layouts/AppLayout';
 interface CalendarEvent {
     id: string;
     version_id: number | null;
-    content_id: number;
+    content_id: number | null;
+    href?: string | null;
     title: string;
     reference_number: string;
     date: string;
     time: string | null;
-    kind: 'publish' | 'deadline';
+    kind: 'publish' | 'deadline' | 'facebook';
     format_label: string;
     platform: { name: string } | null;
     status: { name: string; slug: string; color: string } | null;
@@ -46,7 +47,7 @@ export default function CalendarPage({ events, deadlines, view, focus, date, can
         const versionId = Number(String(event.active.id).replace('version-', ''));
         const day = String(event.over?.id ?? '');
         const item = events.find((entry) => entry.version_id === versionId);
-        if (!day || !item || item.date === day) return;
+        if (!day || !item || item.date === day || item.kind !== 'publish') return;
         router.post(`/versions/${versionId}/reschedule`, { scheduled_at: `${day}T${item.time ?? '09:00'}` }, { preserveScroll: true });
     }
 
@@ -62,7 +63,7 @@ export default function CalendarPage({ events, deadlines, view, focus, date, can
     return (
         <AppLayout>
             <Head title="Content calendar" />
-            <PageHeader title="Content calendar" description="Publishing dates and production deadlines are separate. Dragging a publish chip changes only the publishing date." />
+            <PageHeader title="Content calendar" description="Publishing dates, Facebook schedules, and production deadlines. Facebook chips are set on Meta — they are not dragged here." />
             <div className="mb-4 flex flex-wrap items-center gap-2">
                 <button className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => shift(-1)}>Previous</button>
                 <button className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => router.get('/calendar', { view, focus }, { preserveState: true })}>Today</button>
@@ -115,10 +116,25 @@ function CalendarChip({ event, draggable }: { event: CalendarEvent; draggable: b
 }
 
 function EventRow({ event }: { event: CalendarEvent }) {
+    const href = event.href || (event.content_id ? `/content/${event.content_id}` : '/posting');
+    const tone = event.conflict
+        ? 'bg-amber-100'
+        : event.kind === 'deadline'
+            ? 'bg-violet-50'
+            : event.kind === 'facebook'
+                ? 'bg-sky-50'
+                : 'bg-brand-50';
+
     return (
-        <Link href={`/content/${event.content_id}`} className={`block rounded-md px-2 py-1 text-xs ${event.conflict ? 'bg-amber-100' : event.kind === 'deadline' ? 'bg-violet-50' : 'bg-brand-50'}`}>
+        <Link href={href} className={`block rounded-md px-2 py-1 text-xs ${tone}`}>
             <span className="font-medium">{event.title}</span>
-            <span className="mt-0.5 block text-zinc-600">{event.kind === 'deadline' ? 'Production deadline' : event.platform?.name} · {event.format_label}</span>
+            <span className="mt-0.5 block text-zinc-600">
+                {event.kind === 'deadline'
+                    ? 'Production deadline'
+                    : event.kind === 'facebook'
+                        ? `Facebook · ${event.time ?? ''}${event.status?.slug === 'published' ? ' · Posted' : ' · Scheduled'}`
+                        : `${event.platform?.name} · ${event.format_label}`}
+            </span>
             <StatusBadge status={event.status} />
         </Link>
     );

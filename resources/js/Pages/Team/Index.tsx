@@ -3,6 +3,7 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Button, Field, Input, Modal, PageHeader, Select } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
+import { confirmAction } from '@/lib/confirm';
 
 interface Role {
     id: number;
@@ -71,8 +72,13 @@ export default function TeamIndex({ members, roles, canManage, filters }: { memb
         form.post('/team', options);
     }
 
-    function remove(member: Member) {
-        if (confirm(`Remove ${member.name} from the team?`)) {
+    async function remove(member: Member) {
+        const ok = await confirmAction({
+            title: 'Remove team member?',
+            message: `Remove ${member.name} from the team? This cannot be undone from here.`,
+            confirmLabel: 'Remove',
+        });
+        if (ok) {
             router.delete(`/team/${member.id}`, { preserveScroll: true });
         }
     }

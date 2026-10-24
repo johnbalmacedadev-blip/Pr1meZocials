@@ -26,4 +26,9 @@ class BrandPolicy
     {
         return $user->hasPermission('brands.manage') && ($user->isAdmin() || $user->canAccessBrand($brand->id));
     }
+
+    public function delete(User $user, Brand $brand): bool
+    {
+        return $this->update($user, $brand);
+    }
 }

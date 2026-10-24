@@ -7,6 +7,7 @@ use App\Models\Campaign;
 use App\Models\ContentItem;
 use App\Models\ContentPlatformVersion;
 use App\Models\PerformanceReport;
+use App\Models\SocialPost;
 use App\Models\User;
 use App\Models\WorkflowStatus;
 use Carbon\Carbon;
@@ -43,14 +44,38 @@ class DashboardMetrics
             ? null
             : round($published->avg(fn (ContentItem $item) => abs($item->created_at->diffInHours($item->published_at) / 24)), 1);
 
-        $scheduledIds = ContentPlatformVersion::query()
-            ->whereBetween('scheduled_at', [now()->startOfWeek(Carbon::MONDAY), now()->endOfWeek(Carbon::MONDAY)])
+        $weekStart = now()->startOfWeek(Carbon::MONDAY);
+        $weekEnd = now()->endOfWeek(Carbon::MONDAY);
+
+        $scheduledContentCount = ContentPlatformVersion::query()
+            ->whereBetween('scheduled_at', [$weekStart, $weekEnd])
             ->whereHas('contentItem', function (Builder $query) use ($user, $filters) {
                 $query->visibleTo($user);
                 $this->applyFilters($query, $filters);
             })
             ->pluck('content_item_id')
-            ->unique();
+            ->unique()
+            ->count();
+
+        $facebookThisWeek = $this->facebookPostsQuery($user, $filters)
+            ->where(function (Builder $query) use ($weekStart, $weekEnd) {
+                $query->where(function (Builder $scheduled) use ($weekStart, $weekEnd) {
+                    $scheduled->where('status', 'scheduled')
+                        ->whereNotNull('scheduled_publish_at')
+                        ->whereBetween('scheduled_publish_at', [$weekStart, $weekEnd]);
+                })->orWhere(function (Builder $published) use ($weekStart, $weekEnd) {
+                    $published->where('status', 'published')
+                        ->whereNotNull('published_at')
+                        ->whereBetween('published_at', [$weekStart, $weekEnd]);
+                });
+            })
+            ->count();
+
+        $facebookPublishedInPeriod = $this->facebookPostsQuery($user, $filters)
+            ->where('status', 'published')
+            ->whereNotNull('published_at')
+            ->whereBetween('published_at', [$from, $to])
+            ->count();
 
         $statusCounts = $this->scoped($user, $filters)
             ->selectRaw('status_id, count(*) as total')
@@ -116,8 +141,8 @@ class DashboardMetrics
                 'awaiting_review' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', 'internal_review'))),
                 'overdue' => $count(fn (Builder $query) => $query->whereDate('deadline', '<', now()->toDateString())->whereHas('status', fn (Builder $status) => $status->whereNotIn('slug', $closed))),
                 'approved_ready' => $count(fn (Builder $query) => $query->whereHas('status', fn (Builder $status) => $status->where('slug', 'approved'))),
-                'scheduled_this_week' => $scheduledIds->count(),
-                'published_in_period' => $this->scoped($user, $filters)->whereBetween('published_at', [$from, $to])->count(),
+                'scheduled_this_week' => $scheduledContentCount + $facebookThisWeek,
+                'published_in_period' => $this->scoped($user, $filters)->whereBetween('published_at', [$from, $to])->count() + $facebookPublishedInPeriod,
             ],
             'on_time_rate' => $published->count() === 0 ? null : round($onTime / $published->count() * 100, 1),
             'on_time_sample' => $published->count(),
@@ -209,6 +234,34 @@ class DashboardMetrics
     private function scoped(User $user, array $filters): Builder
     {
         return $this->applyFilters(ContentItem::query()->visibleTo($user), $filters);
+    }
+
+    /**
+     * Facebook posts the user can see, optionally narrowed by dashboard brand/owner filters.
+     *
+     * @param  array<string, mixed>  $filters
+     */
+    private function facebookPostsQuery(User $user, array $filters): Builder
+    {
+        $accessiblePageIds = $user->accessibleSocialAccountIds();
+
+        return SocialPost::query()
+            ->whereHas('account', function (Builder $query) use ($user, $filters, $accessiblePageIds) {
+                $query->whereHas('platform', fn (Builder $platform) => $platform->where('slug', 'facebook'));
+
+                if (! $user->isAdmin()) {
+                    $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0])
+                        ->whereIn('id', $accessiblePageIds ?: [0]);
+                }
+
+                if (! empty($filters['brand_id'])) {
+                    $query->where('brand_id', (int) $filters['brand_id']);
+                }
+            })
+            ->when(
+                ! empty($filters['user_id']),
+                fn (Builder $query) => $query->where('user_id', (int) $filters['user_id'])
+            );
     }
 
     /**

@@ -1,8 +1,10 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { Clapperboard, Image as ImageIcon, Megaphone, Moon, Plus, Sun, SunMedium, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clapperboard, Image as ImageIcon, Megaphone, Moon, Pencil, Plus, Sun, SunMedium, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import FacebookGlyph from '@/Components/FacebookGlyph';
 import { Button, Field, Input, Modal, Select } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
+import { confirmAction } from '@/lib/confirm';
 import { formatDate } from '@/lib/utils';
 
 type Format = 'reel' | 'image' | 'company';
@@ -70,12 +72,52 @@ interface PlannedContent {
     content: { id: number | null; title: string; reference_number: string | null; status: string | null; href: string | null };
 }
 
+interface FacebookSchedulePost {
+    id: number;
+    weekday: string;
+    slot: string;
+    date: string;
+    at: string;
+    caption: string;
+    media_type: 'image' | 'video';
+    media_name: string | null;
+    status: string;
+    permalink_url: string | null;
+    page: string | null;
+    author: string | null;
+}
+
 interface ContentOption {
     id: number;
     title: string;
     reference_number: string;
     status: string | null;
 }
+
+interface WeekDay {
+    key: string;
+    name: string;
+    date: string;
+    label: string;
+    is_today: boolean;
+}
+
+interface WeekMeta {
+    start: string;
+    end: string;
+    label: string;
+    prev: string;
+    next: string;
+    is_current: boolean;
+    days: WeekDay[];
+}
+
+const SLOT_TIMES: Record<string, string> = {
+    morning: '08:00',
+    afternoon: '12:00',
+    flex: '16:00',
+    evening: '19:00',
+};
 
 const columns = [
     { key: 'morning', label: 'Morning', time: '8:00 – 9:00 AM', purpose: 'Engage • Inspire • Start the Day', icon: Sun },
@@ -86,23 +128,66 @@ const columns = [
 
 export default function PostingSchedule({
     entries,
+    facebookPosts = [],
     contentOptions,
     canAssign,
+    canPost = false,
+    week,
 }: {
     entries: PlannedContent[];
+    facebookPosts?: FacebookSchedulePost[];
     contentOptions: ContentOption[];
     canAssign: boolean;
+    canPost?: boolean;
+    week: WeekMeta;
 }) {
-    const today = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'Asia/Manila' }).format(new Date());
-    const [adding, setAdding] = useState<{ weekday: string; slot: string; label: string } | null>(null);
+    const [adding, setAdding] = useState<{ weekday: string; slot: string; label: string; date: string } | null>(null);
+    const dayByKey = useMemo(() => Object.fromEntries(week.days.map((day) => [day.key, day])), [week.days]);
+    const cellProps = {
+        entries,
+        facebookPosts,
+        canAssign,
+        canPost,
+        weekStart: week.start,
+        onAssign: setAdding,
+        dayByKey,
+    };
+
+    function goToWeek(date: string) {
+        router.get('/posting-schedule', { week: date }, { preserveScroll: true, preserveState: true });
+    }
 
     return (
         <AppLayout>
             <Head title="Posting Schedule" />
             <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-                <div className="border-b border-zinc-200 px-5 py-5 text-center">
-                    <h1 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">Facebook Content Schedule</h1>
-                    <p className="mt-1 text-sm text-zinc-600">3 core posts per day + flexible company updates</p>
+                <div className="border-b border-zinc-200 px-5 py-5">
+                    <div className="text-center">
+                        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">Facebook Content Schedule</h1>
+                        <p className="mt-1 text-sm text-zinc-600">
+                            {canPost
+                                ? 'Tap + to compose for that day and time. Browse weeks to see what was scheduled or posted.'
+                                : '3 core posts per day + flexible company updates'}
+                        </p>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                        <Button type="button" size="sm" variant="secondary" onClick={() => goToWeek(week.prev)} aria-label="Previous week">
+                            <ChevronLeft className="h-4 w-4" />
+                            Previous
+                        </Button>
+                        <div className="min-w-[12rem] text-center">
+                            <p className="text-sm font-semibold text-zinc-900">{week.label}</p>
+                            {!week.is_current && (
+                                <button type="button" className="mt-0.5 text-xs font-medium text-brand-700 hover:underline" onClick={() => goToWeek(new Date().toISOString().slice(0, 10))}>
+                                    Jump to this week
+                                </button>
+                            )}
+                        </div>
+                        <Button type="button" size="sm" variant="secondary" onClick={() => goToWeek(week.next)} aria-label="Next week">
+                            Next
+                            <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </div>
                 </div>
                 <div className="hidden lg:block">
                     <div className="grid grid-cols-[7.5rem_repeat(4,minmax(0,1fr))]">
@@ -119,72 +204,100 @@ export default function PostingSchedule({
                             );
                         })}
                         {days.map((day) => {
-                            const current = day.name === today;
+                            const meta = dayByKey[day.name.toLowerCase()];
+                            const current = Boolean(meta?.is_today);
+                            const weekday = day.name.toLowerCase();
+                            const dayDate = meta?.date ?? week.start;
                             return (
-                                <div key={day.name} className="contents">
+                                <div key={`${day.name}-${dayDate}`} className="contents">
                                     <div className={`flex items-center justify-center border-t p-3 ${current ? 'border-brand-700/30 bg-[#dce6f8]' : 'border-zinc-200 bg-zinc-50'}`}>
                                         <div className="rounded-lg bg-brand-700 px-2 py-3 text-center text-xs font-semibold uppercase tracking-wide text-white">
                                             {day.name}
-                                            {current && <span className="mt-1 block text-[10px] font-medium normal-case text-white/90">Today</span>}
+                                            <span className="mt-1 block text-[10px] font-medium normal-case text-white/90">{meta?.label ?? dayDate}</span>
+                                            {current && <span className="mt-0.5 block text-[10px] font-medium normal-case text-white/90">Today</span>}
                                         </div>
                                     </div>
-                                    <Cell template={day.morning} weekday={day.name.toLowerCase()} slot="morning" current={current} entries={entries} canAssign={canAssign} onAdd={setAdding} />
-                                    <Cell template={day.afternoon} weekday={day.name.toLowerCase()} slot="afternoon" current={current} entries={entries} canAssign={canAssign} onAdd={setAdding} />
-                                    <Cell template={flexSlot} weekday={day.name.toLowerCase()} slot="flex" current={current} entries={entries} canAssign={canAssign} onAdd={setAdding} />
-                                    <Cell template={day.evening} weekday={day.name.toLowerCase()} slot="evening" current={current} entries={entries} canAssign={canAssign} onAdd={setAdding} />
+                                    <Cell template={day.morning} weekday={weekday} dayDate={dayDate} slot="morning" current={current} {...cellProps} />
+                                    <Cell template={day.afternoon} weekday={weekday} dayDate={dayDate} slot="afternoon" current={current} {...cellProps} />
+                                    <Cell template={flexSlot} weekday={weekday} dayDate={dayDate} slot="flex" current={current} {...cellProps} />
+                                    <Cell template={day.evening} weekday={weekday} dayDate={dayDate} slot="evening" current={current} {...cellProps} />
                                 </div>
                             );
                         })}
                     </div>
                 </div>
                 <div className="space-y-3 p-3 lg:hidden">
-                    {days.map((day) => (
-                        <article key={day.name} className={`rounded-xl border p-3 ${day.name === today ? 'border-brand-700 bg-brand-50' : 'border-zinc-200 bg-white'}`}>
-                            <h2 className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-white">{day.name}{day.name === today ? ' · Today' : ''}</h2>
-                            <div className="mt-3 space-y-3">
-                                <MobileSlot label="Morning · 8:00 – 9:00 AM" template={day.morning} weekday={day.name.toLowerCase()} slot="morning" entries={entries} canAssign={canAssign} onAdd={setAdding} />
-                                <MobileSlot label="Afternoon · 12:00 – 1:00 PM" template={day.afternoon} weekday={day.name.toLowerCase()} slot="afternoon" entries={entries} canAssign={canAssign} onAdd={setAdding} />
-                                <MobileSlot label="Flex slot · 4:00 – 6:00 PM" template={flexSlot} weekday={day.name.toLowerCase()} slot="flex" entries={entries} canAssign={canAssign} onAdd={setAdding} />
-                                <MobileSlot label="Evening · 7:00 – 8:30 PM" template={day.evening} weekday={day.name.toLowerCase()} slot="evening" entries={entries} canAssign={canAssign} onAdd={setAdding} />
-                            </div>
-                        </article>
-                    ))}
+                    {days.map((day) => {
+                        const meta = dayByKey[day.name.toLowerCase()];
+                        const weekday = day.name.toLowerCase();
+                        const dayDate = meta?.date ?? week.start;
+                        return (
+                            <article key={`${day.name}-${dayDate}`} className={`rounded-xl border p-3 ${meta?.is_today ? 'border-brand-700 bg-brand-50' : 'border-zinc-200 bg-white'}`}>
+                                <h2 className="rounded-lg bg-brand-700 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-white">
+                                    {day.name}
+                                    <span className="mt-0.5 block text-xs font-medium normal-case text-white/90">{meta?.label}{meta?.is_today ? ' · Today' : ''}</span>
+                                </h2>
+                                <div className="mt-3 space-y-3">
+                                    <MobileSlot label="Morning · 8:00 – 9:00 AM" template={day.morning} weekday={weekday} dayDate={dayDate} slot="morning" {...cellProps} />
+                                    <MobileSlot label="Afternoon · 12:00 – 1:00 PM" template={day.afternoon} weekday={weekday} dayDate={dayDate} slot="afternoon" {...cellProps} />
+                                    <MobileSlot label="Flex slot · 4:00 – 6:00 PM" template={flexSlot} weekday={weekday} dayDate={dayDate} slot="flex" {...cellProps} />
+                                    <MobileSlot label="Evening · 7:00 – 8:30 PM" template={day.evening} weekday={weekday} dayDate={dayDate} slot="evening" {...cellProps} />
+                                </div>
+                            </article>
+                        );
+                    })}
                 </div>
             </section>
-            <AddContentModal
-                target={adding}
-                options={contentOptions}
-                onClose={() => setAdding(null)}
-            />
+            {canAssign && (
+                <AddContentModal
+                    target={adding}
+                    options={contentOptions}
+                    onClose={() => setAdding(null)}
+                />
+            )}
         </AppLayout>
     );
 }
 
+type SlotHandlers = {
+    entries: PlannedContent[];
+    facebookPosts: FacebookSchedulePost[];
+    canAssign: boolean;
+    canPost: boolean;
+    weekStart: string;
+    dayByKey: Record<string, WeekDay>;
+    onAssign: (target: { weekday: string; slot: string; label: string; date: string }) => void;
+};
+
 function Cell({
     template,
     weekday,
+    dayDate,
     slot,
     current,
     entries,
+    facebookPosts,
     canAssign,
-    onAdd,
+    canPost,
+    weekStart,
+    dayByKey,
+    onAssign,
 }: {
     template: Slot;
     weekday: string;
+    dayDate: string;
     slot: string;
     current: boolean;
-    entries: PlannedContent[];
-    canAssign: boolean;
-    onAdd: (target: { weekday: string; slot: string; label: string }) => void;
-}) {
-    const filled = entries.some((entry) => entry.weekday === weekday && entry.slot === slot);
+} & SlotHandlers) {
+    const filled = entries.some((entry) => entry.weekday === weekday && entry.slot === slot && entry.post_on === dayDate)
+        || facebookPosts.some((post) => post.weekday === weekday && post.slot === slot && post.date === dayDate);
     const tone = filled
         ? current ? 'border-brand-700/30 bg-[#dce6f8]' : 'border-zinc-200 bg-brand-50'
         : current ? 'border-brand-700/30 bg-brand-50' : 'border-zinc-200 bg-zinc-50';
 
     return (
         <div className={`border-l border-t p-3 ${tone}`}>
-            <SlotPlan template={template} weekday={weekday} slot={slot} entries={entries} canAssign={canAssign} onAdd={onAdd} />
+            <SlotPlan template={template} weekday={weekday} dayDate={dayDate} slot={slot} entries={entries} facebookPosts={facebookPosts} canAssign={canAssign} canPost={canPost} weekStart={weekStart} dayByKey={dayByKey} onAssign={onAssign} />
         </div>
     );
 }
@@ -193,26 +306,30 @@ function MobileSlot({
     label,
     template,
     weekday,
+    dayDate,
     slot,
     entries,
+    facebookPosts,
     canAssign,
-    onAdd,
+    canPost,
+    weekStart,
+    dayByKey,
+    onAssign,
 }: {
     label: string;
     template: Slot;
     weekday: string;
+    dayDate: string;
     slot: string;
-    entries: PlannedContent[];
-    canAssign: boolean;
-    onAdd: (target: { weekday: string; slot: string; label: string }) => void;
-}) {
-    const filled = entries.some((entry) => entry.weekday === weekday && entry.slot === slot);
+} & SlotHandlers) {
+    const filled = entries.some((entry) => entry.weekday === weekday && entry.slot === slot && entry.post_on === dayDate)
+        || facebookPosts.some((post) => post.weekday === weekday && post.slot === slot && post.date === dayDate);
 
     return (
         <div className={`rounded-lg border p-3 ${filled ? 'border-brand-700/20 bg-brand-50' : 'border-zinc-200 bg-zinc-50'}`}>
             <p className="text-xs font-semibold text-zinc-500">{label}</p>
             <div className="mt-1">
-                <SlotPlan template={template} weekday={weekday} slot={slot} entries={entries} canAssign={canAssign} onAdd={onAdd} />
+                <SlotPlan template={template} weekday={weekday} dayDate={dayDate} slot={slot} entries={entries} facebookPosts={facebookPosts} canAssign={canAssign} canPost={canPost} weekStart={weekStart} dayByKey={dayByKey} onAssign={onAssign} />
             </div>
         </div>
     );
@@ -221,21 +338,39 @@ function MobileSlot({
 function SlotPlan({
     template,
     weekday,
+    dayDate,
     slot,
     entries,
+    facebookPosts,
     canAssign,
-    onAdd,
+    canPost,
+    weekStart,
+    onAssign,
 }: {
     template: Slot;
     weekday: string;
+    dayDate: string;
     slot: string;
-    entries: PlannedContent[];
-    canAssign: boolean;
-    onAdd: (target: { weekday: string; slot: string; label: string }) => void;
-}) {
-    const planned = entries.filter((entry) => entry.weekday === weekday && entry.slot === slot);
-    const filled = planned.length > 0;
+} & SlotHandlers) {
+    const planned = entries.filter((entry) => entry.weekday === weekday && entry.slot === slot && entry.post_on === dayDate);
+    const posts = facebookPosts.filter((post) => post.weekday === weekday && post.slot === slot && post.date === dayDate);
+    const filled = planned.length > 0 || posts.length > 0;
     const label = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${slot === 'flex' ? 'flex slot' : slot}`;
+
+    function openCompose() {
+        const time = SLOT_TIMES[slot] ?? '12:00';
+        const params = new URLSearchParams({
+            date: dayDate,
+            time,
+            slot,
+            weekday,
+            format: template.format,
+            title: template.title,
+            return: 'schedule',
+            week: weekStart,
+        });
+        router.visit(`/posting?${params.toString()}`);
+    }
 
     return (
         <>
@@ -243,18 +378,77 @@ function SlotPlan({
                 <div className="min-w-0 flex-1">
                     <SlotBody slot={template} filled={filled} />
                 </div>
-                {canAssign && (
-                    <button type="button" aria-label={`Add content for ${label}`} className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white ${filled ? 'bg-brand-700 hover:bg-brand-800' : 'bg-zinc-400 hover:bg-zinc-500'}`} onClick={() => onAdd({ weekday, slot, label })}>
-                        <Plus className="h-4 w-4" />
-                    </button>
-                )}
+                <div className="flex shrink-0 items-center gap-1">
+                    {canAssign && !canPost && (
+                        <button
+                            type="button"
+                            aria-label={`Assign creative for ${label}`}
+                            className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-white ${filled ? 'bg-brand-700 hover:bg-brand-800' : 'bg-zinc-400 hover:bg-zinc-500'}`}
+                            onClick={() => onAssign({ weekday, slot, label, date: dayDate })}
+                        >
+                            <Plus className="h-4 w-4" />
+                        </button>
+                    )}
+                    {canPost && (
+                        <button
+                            type="button"
+                            aria-label={`Compose Facebook post for ${label} on ${dayDate}`}
+                            title={`Compose for ${dayDate}`}
+                            className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-white ${filled ? 'bg-brand-700 hover:bg-brand-800' : 'bg-zinc-400 hover:bg-zinc-500'}`}
+                            onClick={openCompose}
+                        >
+                            <Plus className="h-4 w-4" />
+                        </button>
+                    )}
+                </div>
             </div>
-            {filled && (
-                <ul className="mt-3 max-h-40 space-y-2 overflow-auto border-t border-brand-700/15 pt-2">
+            {(posts.length > 0 || planned.length > 0) && (
+                <ul className="mt-3 max-h-48 space-y-2 overflow-auto border-t border-brand-700/15 pt-2">
+                    {posts.map((post) => (
+                        <li key={`fb-${post.id}`} className="rounded-md bg-white/90 px-2 py-1.5 ring-1 ring-brand-100">
+                            <button
+                                type="button"
+                                className="w-full text-left"
+                                onClick={() => router.visit(`/posting?tab=history&post=${post.id}`)}
+                            >
+                                <p className="text-[11px] font-semibold text-brand-700">
+                                    {formatDate(post.at)} · {post.status === 'scheduled' ? 'Scheduled' : 'Posted'}
+                                </p>
+                                <p className="truncate text-sm font-medium text-zinc-900">{post.caption || 'Facebook post'}</p>
+                                <p className="truncate text-[11px] text-zinc-500">
+                                    {[post.page, post.media_type === 'video' ? 'Video' : 'Image', post.author].filter(Boolean).join(' · ')}
+                                </p>
+                            </button>
+                            <div className="mt-1 flex items-center gap-1">
+                                <button
+                                    type="button"
+                                    aria-label="View and edit in history"
+                                    title="View and edit in history"
+                                    className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
+                                    onClick={() => router.visit(`/posting?tab=history&post=${post.id}`)}
+                                >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                </button>
+                                {post.permalink_url && (
+                                    <a
+                                        href={post.permalink_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        aria-label="Open on Facebook"
+                                        title="Open on Facebook"
+                                        className="rounded-md p-1 text-[#1877F2] hover:bg-sky-50"
+                                        onClick={(event) => event.stopPropagation()}
+                                    >
+                                        <FacebookGlyph className="h-3.5 w-3.5" />
+                                    </a>
+                                )}
+                            </div>
+                        </li>
+                    ))}
                     {planned.map((entry) => (
                         <li key={entry.id} className="flex items-start justify-between gap-2 rounded-md bg-white/80 px-2 py-1.5">
                             <div className="min-w-0">
-                                <p className="text-[11px] font-semibold text-brand-700">{formatDate(entry.post_on)}</p>
+                                <p className="text-[11px] font-semibold text-zinc-500">Creative · {formatDate(entry.post_on)}</p>
                                 {entry.content.href ? (
                                     <Link href={entry.content.href} className="block truncate text-sm font-medium text-zinc-900 hover:text-brand-700">{entry.content.title}</Link>
                                 ) : (
@@ -263,7 +457,20 @@ function SlotPlan({
                                 <p className="truncate text-[11px] text-zinc-500">{[entry.content.reference_number, entry.content.status].filter(Boolean).join(' · ')}</p>
                             </div>
                             {canAssign && (
-                                <button type="button" aria-label={`Remove ${entry.content.title} from ${label}`} className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700" onClick={() => router.delete(`/posting-schedule/${entry.id}`, { preserveScroll: true })}>
+                                <button
+                                    type="button"
+                                    aria-label={`Remove ${entry.content.title} from ${label}`}
+                                    className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                                    onClick={async () => {
+                                        const ok = await confirmAction({
+                                            title: 'Remove from schedule?',
+                                            message: `Remove “${entry.content.title}” from ${label}?`,
+                                            confirmLabel: 'Remove',
+                                            tone: 'warning',
+                                        });
+                                        if (ok) router.delete(`/posting-schedule/${entry.id}`, { preserveScroll: true });
+                                    }}
+                                >
                                     <X className="h-3.5 w-3.5" />
                                 </button>
                             )}
@@ -280,7 +487,7 @@ function AddContentModal({
     options,
     onClose,
 }: {
-    target: { weekday: string; slot: string; label: string } | null;
+    target: { weekday: string; slot: string; label: string; date: string } | null;
     options: ContentOption[];
     onClose: () => void;
 }) {
@@ -302,7 +509,7 @@ function AddContentModal({
         form.setData({
             weekday: target.weekday,
             slot: target.slot,
-            post_on: nextWeekdayDate(target.weekday),
+            post_on: target.date,
             content_item_id: '',
         });
         setSearch('');
@@ -343,16 +550,6 @@ function AddContentModal({
             </form>
         </Modal>
     );
-}
-
-function nextWeekdayDate(weekday: string): string {
-    const index = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'].indexOf(weekday);
-    const manila = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Manila' }));
-    const delta = (index - manila.getDay() + 7) % 7;
-    manila.setDate(manila.getDate() + delta);
-    const month = String(manila.getMonth() + 1).padStart(2, '0');
-    const day = String(manila.getDate()).padStart(2, '0');
-    return `${manila.getFullYear()}-${month}-${day}`;
 }
 
 function SlotBody({ slot, filled }: { slot: Slot; filled: boolean }) {

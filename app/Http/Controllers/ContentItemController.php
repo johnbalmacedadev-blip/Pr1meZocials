@@ -32,10 +32,12 @@ class ContentItemController extends Controller
             ->withQueryString();
 
         return Inertia::render('Content/Index', [
-            'content' => $this->presenter->paginate($items),
+            'content' => $this->presenter->paginate($items, $request->user()),
             'filters' => $filters,
             'options' => FormOptions::for($request->user()),
             'savedViews' => $request->user()->savedViews()->where('module', 'content')->latest()->get(['id', 'name', 'filters']),
+            'canDelete' => $request->user()->hasPermission('content.delete'),
+            'isTrash' => ! empty($filters['trashed']),
         ]);
     }
 
@@ -116,6 +118,47 @@ class ContentItemController extends Controller
         $content->delete();
 
         return redirect()->route('content.index')->with('success', 'Content moved to trash.');
+    }
+
+    public function bulkDestroy(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('content.delete'), 403);
+
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'force' => ['sometimes', 'boolean'],
+        ]);
+
+        $force = (bool) ($data['force'] ?? false);
+        $ids = array_values(array_unique(array_map('intval', $data['ids'])));
+
+        $items = ContentItem::query()
+            ->when($force, fn ($query) => $query->onlyTrashed())
+            ->whereIn('id', $ids)
+            ->get();
+
+        $deleted = 0;
+        foreach ($items as $item) {
+            if (! $request->user()->can('delete', $item)) {
+                continue;
+            }
+
+            if ($force) {
+                $item->forceDelete();
+            } else {
+                $item->delete();
+            }
+            $deleted++;
+        }
+
+        abort_unless($deleted > 0, 403, 'You cannot delete the selected content.');
+
+        $message = $force
+            ? ($deleted === 1 ? '1 item permanently deleted.' : $deleted.' items permanently deleted.')
+            : ($deleted === 1 ? '1 item moved to trash.' : $deleted.' items moved to trash.');
+
+        return back()->with('success', $message);
     }
 
     public function restore(int $content): RedirectResponse

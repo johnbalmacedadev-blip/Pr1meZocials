@@ -16,3 +16,96 @@
         font: inherit;
     }
 }
+
+.preloader {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: grid;
+    place-items: center;
+    background: rgb(24 24 27 / 0.28);
+    backdrop-filter: blur(2px);
+    animation: preloader-fade 160ms ease-out;
+}
+
+.preloader__panel {
+    display: flex;
+    min-width: 10rem;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 1rem;
+    background: white;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 18px 40px rgb(15 23 42 / 0.18);
+}
+
+.preloader__spinner {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    border: 3px solid #dbe4f7;
+    border-top-color: #284cb8;
+    animation: preloader-spin 0.7s linear infinite;
+}
+
+.preloader__label {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #3f3f46;
+}
+
+#nprogress .bar {
+    height: 3px !important;
+}
+
+#nprogress .spinner-icon {
+    width: 18px !important;
+    height: 18px !important;
+    border-top-color: #284cb8 !important;
+    border-left-color: #284cb8 !important;
+}
+
+@keyframes preloader-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes preloader-fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.confirm-overlay {
+    animation: confirm-fade 160ms ease-out;
+}
+
+.confirm-panel {
+    animation: confirm-pop 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes confirm-fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes confirm-pop {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -46%) scale(0.92);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}

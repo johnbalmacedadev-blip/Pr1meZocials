@@ -150,10 +150,15 @@ class ContentPresenter
      * @param  LengthAwarePaginator<int, ContentItem>  $paginator
      * @return array<string, mixed>
      */
-    public function paginate(LengthAwarePaginator $paginator): array
+    public function paginate(LengthAwarePaginator $paginator, ?User $viewer = null): array
     {
         return [
-            'data' => collect($paginator->items())->map(fn (ContentItem $item) => $this->summary($item))->values(),
+            'data' => collect($paginator->items())->map(function (ContentItem $item) use ($viewer) {
+                $summary = $this->summary($item);
+                $summary['can_delete'] = $viewer ? $viewer->can('delete', $item) : false;
+
+                return $summary;
+            })->values(),
             'current_page' => $paginator->currentPage(),
             'last_page' => $paginator->lastPage(),
             'from' => $paginator->firstItem(),

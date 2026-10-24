@@ -22,11 +22,14 @@ class User extends Authenticatable
         'password',
         'job_title',
         'is_active',
+        'facebook_user_token',
+        'facebook_token_expires_at',
     ];
 
     protected $hidden = [
         'password',
         'remember_token',
+        'facebook_user_token',
     ];
 
     protected function casts(): array
@@ -36,7 +39,14 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'last_seen_at' => 'datetime',
+            'facebook_user_token' => 'encrypted',
+            'facebook_token_expires_at' => 'datetime',
         ];
+    }
+
+    public function hasFacebookConnection(): bool
+    {
+        return filled($this->facebook_user_token);
     }
 
     public function roles(): BelongsToMany
@@ -47,6 +57,11 @@ class User extends Authenticatable
     public function brands(): BelongsToMany
     {
         return $this->belongsToMany(Brand::class);
+    }
+
+    public function socialAccounts(): BelongsToMany
+    {
+        return $this->belongsToMany(SocialAccount::class);
     }
 
     public function campaigns(): BelongsToMany
@@ -116,9 +131,7 @@ class User extends Authenticatable
             return Brand::query()->whereKey($brandId)->exists();
         }
 
-        $this->loadMissing('brands');
-
-        return $this->brands->contains('id', $brandId);
+        return $this->brands()->whereKey($brandId)->exists();
     }
 
     /**
@@ -144,5 +157,28 @@ class User extends Authenticatable
         $this->loadMissing('brands');
 
         return $this->brands->sortBy('name')->values();
+    }
+
+    public function canAccessSocialAccount(int $socialAccountId): bool
+    {
+        if ($this->isAdmin()) {
+            return SocialAccount::query()->whereKey($socialAccountId)->exists();
+        }
+
+        return $this->socialAccounts()->whereKey($socialAccountId)->exists();
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function accessibleSocialAccountIds(): array
+    {
+        if ($this->isAdmin()) {
+            return SocialAccount::query()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        $this->loadMissing('socialAccounts');
+
+        return $this->socialAccounts->pluck('id')->map(fn ($id) => (int) $id)->all();
     }
 }

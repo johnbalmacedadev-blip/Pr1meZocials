@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, Pencil, Trash2 } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { Button, EmptyState, Field, Input, Modal, PageHeader, Pagination, Select } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
+import { confirmAction } from '@/lib/confirm';
 import { formatDate } from '@/lib/utils';
 import { tone, type SharedProps } from '@/types';
 
@@ -105,7 +106,19 @@ export default function InspirationIndex({
                                         </button>
                                     )}
                                     {item.can_delete && (
-                                        <button type="button" aria-label={`Delete ${item.name || 'inspiration'}`} className="rounded-md p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-700" onClick={() => router.delete(`/inspiration/${item.id}`, { preserveScroll: true })}>
+                                        <button
+                                            type="button"
+                                            aria-label={`Delete ${item.name || 'inspiration'}`}
+                                            className="rounded-md p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-700"
+                                            onClick={async () => {
+                                                const ok = await confirmAction({
+                                                    title: 'Delete inspiration?',
+                                                    message: `Delete “${item.name || 'this inspiration'}”? This cannot be undone.`,
+                                                    confirmLabel: 'Delete',
+                                                });
+                                                if (ok) router.delete(`/inspiration/${item.id}`, { preserveScroll: true });
+                                            }}
+                                        >
                                             <Trash2 className="h-4 w-4" />
                                         </button>
                                     )}

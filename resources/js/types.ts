@@ -77,6 +77,7 @@ export interface ContentSummary {
     updated_at: string | null;
     is_overdue: boolean;
     complexity: number | null;
+    can_delete?: boolean;
     brand: { id: number; name: string } | null;
     campaign: { id: number; name: string } | null;
     status: StatusRef | null;

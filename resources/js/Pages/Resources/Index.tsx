@@ -3,6 +3,7 @@ import { Download, File, Folder, LayoutGrid, List, Pencil, Trash2 } from 'lucide
 import { FormEvent, useEffect, useState } from 'react';
 import { Button, EmptyState, Field, Input, Modal, PageHeader, Pagination } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
+import { confirmAction } from '@/lib/confirm';
 import { formatDate, visitFilters } from '@/lib/utils';
 
 interface ResourceCard {
@@ -300,7 +301,19 @@ function EditDelete({ item, onEdit }: { item: ResourceCard; onEdit: (item: Resou
                 </button>
             )}
             {item.can_delete && (
-                <button type="button" aria-label={`Delete ${item.name}`} className="rounded-md p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-700" onClick={() => router.delete(`/resources/${item.id}`, { preserveScroll: true })}>
+                <button
+                    type="button"
+                    aria-label={`Delete ${item.name}`}
+                    className="rounded-md p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-700"
+                    onClick={async () => {
+                        const ok = await confirmAction({
+                            title: 'Delete resource?',
+                            message: `Delete “${item.name}”? This cannot be undone.`,
+                            confirmLabel: 'Delete',
+                        });
+                        if (ok) router.delete(`/resources/${item.id}`, { preserveScroll: true });
+                    }}
+                >
                     <Trash2 className="h-4 w-4" />
                 </button>
             )}

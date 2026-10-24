@@ -12,18 +12,22 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\PlatformVersionController;
 use App\Http\Controllers\PostingScheduleController;
+use App\Http\Controllers\SocialPostingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ResourceLinkController;
 use App\Http\Controllers\SavedViewController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\TeamInviteController;
 use App\Http\Controllers\TaskNoteController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:login');
+    Route::get('/join/{token}', [TeamInviteController::class, 'show'])->name('join.show');
+    Route::post('/join/{token}', [TeamInviteController::class, 'register'])->middleware('throttle:10,1')->name('join.register');
 });
 
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->middleware('auth')->name('logout');
@@ -37,6 +41,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/content/create', [ContentItemController::class, 'create'])->name('content.create');
     Route::post('/content', [ContentItemController::class, 'store'])->name('content.store');
     Route::get('/content/export', [ContentItemController::class, 'export'])->middleware('throttle:exports')->name('content.export');
+    Route::post('/content/bulk-destroy', [ContentItemController::class, 'bulkDestroy'])->name('content.bulk-destroy');
     Route::get('/content/{content}', [ContentItemController::class, 'show'])->name('content.show');
     Route::get('/content/{content}/edit', [ContentItemController::class, 'edit'])->name('content.edit');
     Route::put('/content/{content}', [ContentItemController::class, 'update'])->name('content.update');
@@ -102,6 +107,17 @@ Route::middleware('auth')->group(function () {
     Route::post('/performance', [PerformanceController::class, 'store'])->name('performance.store');
     Route::delete('/performance/{report}', [PerformanceController::class, 'destroy'])->name('performance.destroy');
 
+    Route::get('/posting', [SocialPostingController::class, 'index'])->name('posting.index');
+    Route::post('/posting', [SocialPostingController::class, 'store'])->middleware('throttle:uploads')->name('posting.store');
+    Route::get('/posting/facebook/redirect', [SocialPostingController::class, 'redirectToFacebook'])->name('posting.facebook.redirect');
+    Route::get('/posting/facebook/callback', [SocialPostingController::class, 'handleFacebookCallback'])->name('posting.facebook.callback');
+    Route::post('/posting/facebook/refresh', [SocialPostingController::class, 'refreshPages'])->name('posting.facebook.refresh');
+    Route::delete('/posting/facebook', [SocialPostingController::class, 'destroyMeta'])->name('posting.facebook.destroy');
+    Route::patch('/posting/pages/{account}', [SocialPostingController::class, 'updatePage'])->name('posting.pages.update');
+    Route::post('/posting/{post}/sync', [SocialPostingController::class, 'sync'])->name('posting.sync');
+    Route::put('/posting/{post}', [SocialPostingController::class, 'update'])->name('posting.update');
+    Route::delete('/posting/{post}', [SocialPostingController::class, 'destroy'])->name('posting.destroy');
+
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
     Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->name('notifications.read');
@@ -112,15 +128,27 @@ Route::middleware('auth')->group(function () {
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::post('/settings/users', [SettingsController::class, 'storeUser'])->name('settings.users.store');
     Route::put('/settings/users/{user}', [SettingsController::class, 'updateUser'])->name('settings.users.update');
+    Route::post('/settings/invites', [TeamInviteController::class, 'store'])->name('settings.invites.store');
+    Route::delete('/settings/invites/{invite}', [TeamInviteController::class, 'destroy'])->name('settings.invites.destroy');
     Route::post('/settings/brands', [SettingsController::class, 'storeBrand'])->name('settings.brands.store');
     Route::put('/settings/brands/{brand}', [SettingsController::class, 'updateBrand'])->name('settings.brands.update');
+    Route::delete('/settings/brands/{brand}', [SettingsController::class, 'destroyBrand'])->name('settings.brands.destroy');
     Route::post('/settings/platforms', [SettingsController::class, 'storePlatform'])->name('settings.platforms.store');
     Route::put('/settings/platforms/{platform}', [SettingsController::class, 'updatePlatform'])->name('settings.platforms.update');
+    Route::delete('/settings/platforms/{platform}', [SettingsController::class, 'destroyPlatform'])->name('settings.platforms.destroy');
     Route::put('/settings/workflow/{status}', [SettingsController::class, 'updateWorkflow'])->name('settings.workflow.update');
     Route::post('/settings/pillars', [SettingsController::class, 'storePillar'])->name('settings.pillars.store');
+    Route::put('/settings/pillars/{pillar}', [SettingsController::class, 'updatePillar'])->name('settings.pillars.update');
+    Route::delete('/settings/pillars/{pillar}', [SettingsController::class, 'destroyPillar'])->name('settings.pillars.destroy');
     Route::post('/settings/objectives', [SettingsController::class, 'storeObjective'])->name('settings.objectives.store');
+    Route::put('/settings/objectives/{objective}', [SettingsController::class, 'updateObjective'])->name('settings.objectives.update');
+    Route::delete('/settings/objectives/{objective}', [SettingsController::class, 'destroyObjective'])->name('settings.objectives.destroy');
     Route::post('/settings/segments', [SettingsController::class, 'storeSegment'])->name('settings.segments.store');
+    Route::put('/settings/segments/{segment}', [SettingsController::class, 'updateSegment'])->name('settings.segments.update');
+    Route::delete('/settings/segments/{segment}', [SettingsController::class, 'destroySegment'])->name('settings.segments.destroy');
     Route::post('/settings/tags', [SettingsController::class, 'storeTag'])->name('settings.tags.store');
+    Route::put('/settings/tags/{tag}', [SettingsController::class, 'updateTag'])->name('settings.tags.update');
+    Route::delete('/settings/tags/{tag}', [SettingsController::class, 'destroyTag'])->name('settings.tags.destroy');
     Route::put('/settings/general', [SettingsController::class, 'updateSettings'])->name('settings.general.update');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

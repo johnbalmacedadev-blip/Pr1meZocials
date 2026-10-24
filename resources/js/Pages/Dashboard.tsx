@@ -31,13 +31,15 @@ interface Metrics {
 }
 
 interface ScheduleEvent {
-    id: number;
-    content_id: number;
+    id: string | number;
+    content_id: number | null;
+    href?: string | null;
     title: string;
     date: string;
     time: string;
     platform: string | null;
     brand: string | null;
+    kind?: 'publish' | 'facebook';
 }
 
 interface Schedule {
@@ -54,7 +56,7 @@ const cards = [
     ['awaiting_review', 'For review'],
     ['overdue', 'Overdue'],
     ['approved_ready', 'Approved to publish'],
-    ['scheduled_this_week', 'Scheduled this week'],
+    ['scheduled_this_week', 'Posts this week'],
     ['published_in_period', 'Published in period'],
 ] as const;
 
@@ -189,7 +191,7 @@ function MonthSchedule({ schedule, filters }: { schedule: Schedule; filters: Rec
     return (
         <div>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-zinc-500">Publishing dates for the whole month. Filters on the dashboard apply to this calendar.</p>
+                <p className="text-sm text-zinc-500">Publishing dates and Facebook posts for the month. Same Facebook items as Posting Schedule.</p>
                 <div className="flex flex-wrap items-center gap-2">
                     <button type="button" className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => openMonth(format(addMonths(anchor, -1), 'yyyy-MM-dd'))}>Previous</button>
                     <button type="button" className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => openMonth(format(new Date(), 'yyyy-MM-dd'))}>Today</button>
@@ -212,7 +214,11 @@ function MonthSchedule({ schedule, filters }: { schedule: Schedule; filters: Rec
                                     <p className={`text-xs font-medium ${isSameMonth(day, anchor) ? 'text-zinc-700' : 'text-zinc-400'}`}>{format(day, 'd')}</p>
                                     <div className="mt-1 space-y-1">
                                         {shown.map((event) => (
-                                            <Link key={event.id} href={`/content/${event.content_id}`} className="block rounded-md bg-brand-50 px-1.5 py-1 text-xs leading-4 text-zinc-800 hover:ring-1 hover:ring-brand-700">
+                                            <Link
+                                                key={event.id}
+                                                href={event.href || (event.content_id ? `/content/${event.content_id}` : '/posting')}
+                                                className={`block rounded-md px-1.5 py-1 text-xs leading-4 text-zinc-800 hover:ring-1 hover:ring-brand-700 ${event.kind === 'facebook' ? 'bg-sky-50' : 'bg-brand-50'}`}
+                                            >
                                                 <span className="block truncate font-medium">{event.time} {event.title}</span>
                                                 <span className="block truncate text-zinc-500">{event.platform ?? 'Unscheduled platform'}</span>
                                             </Link>

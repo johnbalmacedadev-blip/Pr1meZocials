@@ -9,7 +9,9 @@ use App\Models\ContentPillar;
 use App\Models\Platform;
 use App\Models\Role;
 use App\Models\Setting;
+use App\Models\SocialAccount;
 use App\Models\Tag;
+use App\Models\TeamInvite;
 use App\Models\User;
 use App\Models\WorkflowStatus;
 use App\Rules\HttpUrl;
@@ -34,7 +36,7 @@ class SettingsController extends Controller
             'section' => $request->string('section')->toString() ?: 'general',
             'users' => $user->hasPermission('users.view') || $user->hasPermission('users.manage')
                 ? User::query()
-                    ->with(['roles:id,name,slug', 'brands:id,name'])
+                    ->with(['roles:id,name,slug', 'brands:id,name', 'socialAccounts:id,name,brand_id'])
                     ->when(! $user->isAdmin(), fn ($query) => $query->where(function ($inner) use ($user) {
                         $inner->whereHas('brands', fn ($brands) => $brands->whereIn('brands.id', $user->accessibleBrandIds() ?: [0]))
                             ->orWhere('users.id', $user->id);
@@ -42,20 +44,37 @@ class SettingsController extends Controller
                     ->orderBy('name')
                     ->get()
                     ->map(fn (User $person) => [
-                    'id' => $person->id,
-                    'name' => $person->name,
-                    'email' => $person->email,
-                    'job_title' => $person->job_title,
-                    'is_active' => $person->is_active,
-                    'roles' => $person->roles->map->only(['id', 'name', 'slug'])->values(),
-                    'brands' => $person->brands->map->only(['id', 'name'])->values(),
-                ])
+                        'id' => $person->id,
+                        'name' => $person->name,
+                        'email' => $person->email,
+                        'job_title' => $person->job_title,
+                        'is_active' => $person->is_active,
+                        'roles' => $person->roles->map->only(['id', 'name', 'slug'])->values(),
+                        'brands' => $person->brands->map->only(['id', 'name'])->values(),
+                        'social_account_ids' => $person->socialAccounts->pluck('id')->map(fn ($id) => (int) $id)->values(),
+                        'social_accounts' => $person->socialAccounts->map->only(['id', 'name'])->values(),
+                    ])
                 : [],
             'roles' => Role::query()->orderBy('name')->get(['id', 'name', 'slug', 'description']),
             'brands' => Brand::query()
                 ->when(! $user->isAdmin(), fn ($query) => $query->whereIn('id', $user->accessibleBrandIds() ?: [0]))
                 ->orderBy('name')
                 ->get(),
+            'facebookPages' => ($user->hasPermission('users.view') || $user->hasPermission('users.manage'))
+                ? SocialAccount::query()
+                    ->with('brand:id,name')
+                    ->whereHas('platform', fn ($query) => $query->where('slug', 'facebook'))
+                    ->when(! $user->isAdmin(), fn ($query) => $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0]))
+                    ->orderBy('name')
+                    ->get()
+                    ->map(fn (SocialAccount $account) => [
+                        'id' => $account->id,
+                        'name' => $account->name,
+                        'brand_id' => $account->brand_id,
+                        'brand_name' => $account->brand?->name,
+                        'is_active' => $account->is_active,
+                    ])
+                : [],
             'platforms' => $user->hasPermission('platforms.manage') ? Platform::query()->orderBy('sort_order')->get() : [],
             'statuses' => $user->hasPermission('workflow.manage') ? WorkflowStatus::query()->orderBy('sort_order')->get() : [],
             'pillars' => ContentPillar::query()->orderBy('name')->get(),
@@ -66,6 +85,26 @@ class SettingsController extends Controller
                 'deadline_warning_days' => Setting::getValue('deadline_warning_days', config('ops.deadline_warning_days')),
                 'organization_name' => Setting::getValue('organization_name', 'Prime Z'),
             ],
+            'invites' => $user->hasPermission('users.manage')
+                ? TeamInvite::query()
+                    ->with(['role:id,name,slug', 'creator:id,name'])
+                    ->latest()
+                    ->limit(20)
+                    ->get()
+                    ->map(fn (TeamInvite $invite) => [
+                        'id' => $invite->id,
+                        'url' => $invite->joinUrl(),
+                        'role' => $invite->role?->only(['id', 'name', 'slug']),
+                        'brand_ids' => $invite->brand_ids ?? [],
+                        'expires_at' => $invite->expires_at?->toIso8601String(),
+                        'max_uses' => $invite->max_uses,
+                        'uses_count' => $invite->uses_count,
+                        'revoked_at' => $invite->revoked_at?->toIso8601String(),
+                        'is_open' => $invite->isOpen(),
+                        'created_by' => $invite->creator?->name,
+                        'created_at' => $invite->created_at?->toIso8601String(),
+                    ])
+                : [],
             'abilities' => [
                 'users' => $user->hasPermission('users.manage'),
                 'brands' => $user->hasPermission('brands.manage'),
@@ -92,7 +131,11 @@ class SettingsController extends Controller
             'role_ids.*' => ['integer', 'exists:roles,id'],
             'brand_ids' => ['nullable', 'array'],
             'brand_ids.*' => ['integer', 'exists:brands,id'],
+            'social_account_ids' => ['nullable', 'array'],
+            'social_account_ids.*' => ['integer', 'exists:social_accounts,id'],
         ]);
+
+        $pageIds = $this->validatedSocialAccountIds($request->user(), $data['social_account_ids'] ?? [], $data['brand_ids'] ?? []);
 
         $person = User::query()->create([
             'name' => $data['name'],
@@ -104,6 +147,7 @@ class SettingsController extends Controller
         ]);
         $person->roles()->sync($data['role_ids']);
         $person->brands()->sync($data['brand_ids'] ?? []);
+        $person->socialAccounts()->sync($pageIds);
 
         return back()->with('success', 'User created.');
     }
@@ -122,6 +166,8 @@ class SettingsController extends Controller
             'role_ids.*' => ['integer', 'exists:roles,id'],
             'brand_ids' => ['nullable', 'array'],
             'brand_ids.*' => ['integer', 'exists:brands,id'],
+            'social_account_ids' => ['nullable', 'array'],
+            'social_account_ids.*' => ['integer', 'exists:social_accounts,id'],
         ]);
 
         $adminRoleId = Role::query()->where('slug', 'administrator')->value('id');
@@ -133,6 +179,8 @@ class SettingsController extends Controller
                 'role_ids' => 'At least one active administrator is required.',
             ]);
         }
+
+        $pageIds = $this->validatedSocialAccountIds($request->user(), $data['social_account_ids'] ?? [], $data['brand_ids'] ?? []);
 
         $user->fill([
             'name' => $data['name'],
@@ -148,6 +196,7 @@ class SettingsController extends Controller
         $user->save();
         $user->roles()->sync($data['role_ids']);
         $user->brands()->sync($data['brand_ids'] ?? []);
+        $user->socialAccounts()->sync($pageIds);
 
         return back()->with('success', 'User updated.');
     }
@@ -170,10 +219,21 @@ class SettingsController extends Controller
 
     public function updateBrand(Request $request, Brand $brand): RedirectResponse
     {
-        $this->authorize('update', $brand);
+        abort_unless($request->user()->hasPermission('brands.manage'), 403);
+        abort_unless($request->user()->canAccessBrand($brand->id), 403);
         $brand->update($this->brandData($request));
 
         return back()->with('success', 'Brand updated.');
+    }
+
+    public function destroyBrand(Request $request, Brand $brand): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('brands.manage'), 403);
+        abort_unless($request->user()->canAccessBrand($brand->id), 403);
+
+        $brand->delete();
+
+        return back()->with('success', 'Brand deleted.');
     }
 
     public function storePlatform(Request $request): RedirectResponse
@@ -212,6 +272,28 @@ class SettingsController extends Controller
         return back()->with('success', 'Platform updated.');
     }
 
+    public function destroyPlatform(Request $request, Platform $platform): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('platforms.manage'), 403);
+
+        if (! $platform->is_custom) {
+            throw ValidationException::withMessages([
+                'platform' => 'Built-in platforms cannot be deleted. Hide them instead.',
+            ]);
+        }
+
+        if ($platform->socialAccounts()->exists() || $platform->versions()->exists()) {
+            throw ValidationException::withMessages([
+                'platform' => 'This platform is in use and cannot be deleted.',
+            ]);
+        }
+
+        $platform->delete();
+        Lookups::flush();
+
+        return back()->with('success', 'Platform deleted.');
+    }
+
     public function updateWorkflow(Request $request, WorkflowStatus $status): RedirectResponse
     {
         abort_unless($request->user()->hasPermission('workflow.manage'), 403);
@@ -237,6 +319,27 @@ class SettingsController extends Controller
         return back()->with('success', 'Content pillar added.');
     }
 
+    public function updatePillar(Request $request, ContentPillar $pillar): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('taxonomy.manage'), 403);
+        $data = $request->validate(['name' => ['required', 'string', 'max:80'], 'description' => ['nullable', 'string', 'max:500']]);
+        $pillar->update([
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'slug' => $pillar->name === $data['name'] ? $pillar->slug : $this->uniqueSlug(ContentPillar::class, $data['name'], $pillar->id),
+        ]);
+
+        return back()->with('success', 'Content pillar updated.');
+    }
+
+    public function destroyPillar(Request $request, ContentPillar $pillar): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('taxonomy.manage'), 403);
+        $pillar->delete();
+
+        return back()->with('success', 'Content pillar deleted.');
+    }
+
     public function storeObjective(Request $request): RedirectResponse
     {
         abort_unless($request->user()->hasPermission('taxonomy.manage'), 403);
@@ -246,50 +349,75 @@ class SettingsController extends Controller
         return back()->with('success', 'Objective added.');
     }
 
+    public function updateObjective(Request $request, ContentObjective $objective): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('taxonomy.manage'), 403);
+        $data = $request->validate(['name' => ['required', 'string', 'max:80'], 'description' => ['nullable', 'string', 'max:500']]);
+        $objective->update([
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'slug' => $objective->name === $data['name'] ? $objective->slug : $this->uniqueSlug(ContentObjective::class, $data['name'], $objective->id),
+        ]);
+
+        return back()->with('success', 'Objective updated.');
+    }
+
+    public function destroyObjective(Request $request, ContentObjective $objective): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('taxonomy.manage'), 403);
+        $objective->delete();
+
+        return back()->with('success', 'Objective deleted.');
+    }
+
     public function storeSegment(Request $request): RedirectResponse
     {
         abort_unless($request->user()->hasPermission('taxonomy.manage'), 403);
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:120'],
-            'description' => ['nullable', 'string', 'max:500'],
-            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
-        ]);
-
-        if (! empty($data['brand_id'])) {
-            abort_unless($request->user()->canAccessBrand((int) $data['brand_id']), 403);
-        }
-
+        $data = $this->segmentData($request);
         AudienceSegment::query()->create($data);
 
         return back()->with('success', 'Audience segment added.');
     }
 
+    public function updateSegment(Request $request, AudienceSegment $segment): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('taxonomy.manage'), 403);
+        $segment->update($this->segmentData($request));
+
+        return back()->with('success', 'Audience segment updated.');
+    }
+
+    public function destroySegment(Request $request, AudienceSegment $segment): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('taxonomy.manage'), 403);
+        $segment->delete();
+
+        return back()->with('success', 'Audience segment deleted.');
+    }
+
     public function storeTag(Request $request): RedirectResponse
     {
         abort_unless($request->user()->hasPermission('tags.manage'), 403);
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:80'],
-            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
-        ]);
-
-        if (! empty($data['brand_id'])) {
-            abort_unless($request->user()->canAccessBrand((int) $data['brand_id']), 403);
-        }
-
-        $slug = Str::slug($data['name']) ?: 'tag';
-        $exists = Tag::query()->where('slug', $slug)->where('brand_id', $data['brand_id'] ?? null)->exists();
-
-        if ($exists) {
-            throw ValidationException::withMessages(['name' => 'That tag already exists for this brand.']);
-        }
-
-        Tag::query()->create([
-            'name' => $data['name'],
-            'slug' => $slug,
-            'brand_id' => $data['brand_id'] ?? null,
-        ]);
+        $data = $this->tagData($request);
+        Tag::query()->create($data);
 
         return back()->with('success', 'Tag added.');
+    }
+
+    public function updateTag(Request $request, Tag $tag): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('tags.manage'), 403);
+        $tag->update($this->tagData($request, $tag->id));
+
+        return back()->with('success', 'Tag updated.');
+    }
+
+    public function destroyTag(Request $request, Tag $tag): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('tags.manage'), 403);
+        $tag->delete();
+
+        return back()->with('success', 'Tag deleted.');
     }
 
     public function updateSettings(Request $request): RedirectResponse
@@ -318,6 +446,59 @@ class SettingsController extends Controller
     }
 
     /**
+     * @return array{name: string, description: ?string, brand_id: ?int}
+     */
+    private function segmentData(Request $request): array
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
+        ]);
+
+        if (! empty($data['brand_id'])) {
+            abort_unless($request->user()->canAccessBrand((int) $data['brand_id']), 403);
+        }
+
+        $data['brand_id'] = $data['brand_id'] ?? null;
+        $data['description'] = ($data['description'] ?? '') === '' ? null : $data['description'];
+
+        return $data;
+    }
+
+    /**
+     * @return array{name: string, slug: string, brand_id: ?int}
+     */
+    private function tagData(Request $request, ?int $ignoreId = null): array
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:80'],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
+        ]);
+
+        if (! empty($data['brand_id'])) {
+            abort_unless($request->user()->canAccessBrand((int) $data['brand_id']), 403);
+        }
+
+        $slug = Str::slug($data['name']) ?: 'tag';
+        $exists = Tag::query()
+            ->where('slug', $slug)
+            ->where('brand_id', $data['brand_id'] ?? null)
+            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
+            ->exists();
+
+        if ($exists) {
+            throw ValidationException::withMessages(['name' => 'That tag already exists for this brand.']);
+        }
+
+        return [
+            'name' => $data['name'],
+            'slug' => $slug,
+            'brand_id' => $data['brand_id'] ?? null,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function brandData(Request $request): array
@@ -343,19 +524,66 @@ class SettingsController extends Controller
     /**
      * @param  class-string  $model
      */
-    private function uniqueSlug(string $model, string $name): string
+    private function uniqueSlug(string $model, string $name, ?int $ignoreId = null): string
     {
         $base = Str::slug($name) ?: 'item';
         $slug = $base;
         $suffix = 2;
-        $query = method_exists($model, 'bootSoftDeletes') ? $model::withTrashed() : $model::query();
 
-        while ((clone $query)->where('slug', $slug)->exists()) {
+        while (
+            $model::query()
+                ->when(
+                    method_exists($model, 'bootSoftDeletes'),
+                    fn ($query) => $query->withTrashed(),
+                )
+                ->where('slug', $slug)
+                ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
+                ->exists()
+        ) {
             $slug = $base.'-'.$suffix;
             $suffix++;
-            $query = method_exists($model, 'bootSoftDeletes') ? $model::withTrashed() : $model::query();
         }
 
         return $slug;
+    }
+
+    /**
+     * @param  list<int|string>  $socialAccountIds
+     * @param  list<int|string>  $brandIds
+     * @return list<int>
+     */
+    private function validatedSocialAccountIds(User $actor, array $socialAccountIds, array $brandIds): array
+    {
+        $requested = array_values(array_unique(array_map('intval', $socialAccountIds)));
+        if ($requested === []) {
+            return [];
+        }
+
+        $brandIds = array_values(array_unique(array_map('intval', $brandIds)));
+        $allowedBrandIds = $actor->isAdmin()
+            ? $brandIds
+            : array_values(array_intersect($brandIds, $actor->accessibleBrandIds()));
+
+        if ($allowedBrandIds === []) {
+            throw ValidationException::withMessages([
+                'social_account_ids' => 'Assign at least one brand before granting Facebook page access.',
+            ]);
+        }
+
+        $validIds = SocialAccount::query()
+            ->whereHas('platform', fn ($query) => $query->where('slug', 'facebook'))
+            ->whereIn('brand_id', $allowedBrandIds)
+            ->whereIn('id', $requested)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        if (count($validIds) !== count($requested)) {
+            throw ValidationException::withMessages([
+                'social_account_ids' => 'One or more Facebook pages are invalid for the selected brands.',
+            ]);
+        }
+
+        return $validIds;
     }
 }

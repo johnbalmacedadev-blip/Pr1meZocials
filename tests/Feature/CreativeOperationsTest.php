@@ -79,6 +79,21 @@ class CreativeOperationsTest extends TestCase
             'is_active' => true,
         ])->assertRedirect();
 
+        $harbor = \App\Models\Brand::query()->where('name', 'Harbor Goods')->firstOrFail();
+
+        $this->actingAs($manager)->put('/settings/brands/'.$harbor->id, [
+            'name' => 'Harbor Goods Updated',
+            'description' => 'Outdoor retail and apparel',
+            'website' => 'https://harbor.example',
+            'industry' => 'Retail',
+            'is_active' => true,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('brands', ['id' => $harbor->id, 'name' => 'Harbor Goods Updated']);
+
+        $this->actingAs($manager)->delete('/settings/brands/'.$harbor->id)->assertRedirect();
+        $this->assertSoftDeleted('brands', ['id' => $harbor->id]);
+
         $this->actingAs($manager)->post('/campaigns', [
             'brand_id' => $brand->id,
             'name' => 'Trail Season',
@@ -377,6 +392,45 @@ class CreativeOperationsTest extends TestCase
         ])->assertRedirect();
 
         $this->actingAs($creative)->get("/content/{$item->id}/edit")->assertOk();
+    }
+
+    public function test_manager_can_bulk_move_content_to_trash_and_force_delete(): void
+    {
+        $brand = $this->makeBrand('Northwind');
+        $manager = $this->makeUser('marketing_manager', $brand);
+
+        $this->actingAs($manager)->post('/content', [
+            'title' => 'Bulk one',
+            'brand_id' => $brand->id,
+            'format' => 'photo',
+        ])->assertRedirect();
+        $this->actingAs($manager)->post('/content', [
+            'title' => 'Bulk two',
+            'brand_id' => $brand->id,
+            'format' => 'photo',
+        ])->assertRedirect();
+
+        $ids = ContentItem::query()->whereIn('title', ['Bulk one', 'Bulk two'])->pluck('id')->all();
+
+        $this->actingAs($manager)->get('/content')->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->where('canDelete', true)
+            ->where('isTrash', false)
+            ->where('content.data.0.can_delete', true)
+        );
+
+        $this->actingAs($manager)->post('/content/bulk-destroy', [
+            'ids' => $ids,
+            'force' => false,
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertSame(2, ContentItem::onlyTrashed()->whereIn('id', $ids)->count());
+
+        $this->actingAs($manager)->post('/content/bulk-destroy', [
+            'ids' => $ids,
+            'force' => true,
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $this->assertSame(0, ContentItem::withTrashed()->whereIn('id', $ids)->count());
     }
 
     private function pngUpload(): UploadedFile

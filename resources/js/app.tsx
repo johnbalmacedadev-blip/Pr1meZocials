@@ -2,6 +2,8 @@ import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
+import { ConfirmDialog } from '@/Components/ConfirmDialog';
+import { Preloader } from '@/Components/Preloader';
 
 const pages = import.meta.glob('./Pages/**/*.tsx');
 
@@ -14,10 +16,19 @@ const boot = {
             return;
         }
 
-        createRoot(el).render(<App {...props} />);
+        createRoot(el).render(
+            <>
+                <Preloader />
+                <ConfirmDialog />
+                <App {...props} />
+            </>,
+        );
     },
     progress: {
         color: '#284cb8',
+        showSpinner: true,
+        delay: 100,
+        includeCSS: true,
     },
 };
 

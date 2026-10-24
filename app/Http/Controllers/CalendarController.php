@@ -6,6 +6,7 @@ use App\Models\ContentItem;
 use App\Models\ContentPlatformVersion;
 use App\Services\ContentQuery;
 use App\Support\ContentPresenter;
+use App\Support\FacebookCalendarEvents;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -44,6 +45,7 @@ class CalendarController extends Controller
                 'id' => 'version-'.$version->id,
                 'version_id' => $version->id,
                 'content_id' => $version->content_item_id,
+                'href' => '/content/'.$version->content_item_id,
                 'title' => $version->contentItem->title,
                 'reference_number' => $version->contentItem->reference_number,
                 'date' => $version->scheduled_at->toDateString(),
@@ -61,6 +63,10 @@ class CalendarController extends Controller
             ];
         })->values();
 
+        $facebookPosts = FacebookCalendarEvents::inRange($request->user(), $start, $end);
+
+        $events = $events->concat($facebookPosts)->sortBy(fn (array $event) => ($event['date'] ?? '').' '.($event['time'] ?? ''))->values();
+
         $deadlines = ContentItem::query()
             ->whereIn('id', $visibleIds)
             ->whereBetween('deadline', [$start->toDateString(), $end->toDateString()])
@@ -71,6 +77,7 @@ class CalendarController extends Controller
                 'id' => 'deadline-'.$item->id,
                 'version_id' => null,
                 'content_id' => $item->id,
+                'href' => '/content/'.$item->id,
                 'title' => $item->title,
                 'reference_number' => $item->reference_number,
                 'date' => $item->deadline?->toDateString(),
