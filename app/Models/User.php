@@ -178,11 +178,21 @@ class User extends Authenticatable
             return SocialAccount::query()->whereKey($socialAccountId)->exists();
         }
 
+        // Publishers share workspace page tokens — no personal Meta login required.
+        if ($this->hasPermission('content.publish')) {
+            return SocialAccount::query()
+                ->whereKey($socialAccountId)
+                ->whereIn('brand_id', $this->accessibleBrandIds() ?: [0])
+                ->exists();
+        }
+
         return $this->socialAccounts()->whereKey($socialAccountId)->exists();
     }
 
     /**
-     * Pages the user may publish to (explicitly linked pages).
+     * Pages the user may publish to.
+     * Publishers use every Facebook page under their brands (shared admin tokens).
+     * Everyone else is limited to explicitly linked pages.
      *
      * @return list<int>
      */
@@ -190,6 +200,14 @@ class User extends Authenticatable
     {
         if ($this->isAdmin()) {
             return SocialAccount::query()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        }
+
+        if ($this->hasPermission('content.publish')) {
+            return SocialAccount::query()
+                ->whereIn('brand_id', $this->accessibleBrandIds() ?: [0])
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
         }
 
         $this->loadMissing('socialAccounts');

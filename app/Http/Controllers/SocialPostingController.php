@@ -6,6 +6,7 @@ use App\Models\ContentItem;
 use App\Models\Platform;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
+use App\Models\User;
 use App\Services\FacebookPublisher;
 use App\Services\NotificationService;
 use App\Support\FacebookCredentials;
@@ -104,7 +105,9 @@ class SocialPostingController extends Controller
                 'metaAppId' => FacebookCredentials::appId(),
                 'metaAppSecret' => FacebookCredentials::appSecret(),
                 'metaRedirectUri' => FacebookCredentials::redirectUri(),
-                'canManagePages' => $user->hasPermission('content.publish'),
+                'canManageMeta' => $this->canManageMeta($user),
+                'canManagePages' => $this->canManageMeta($user),
+                'workspacePagesReady' => $pages->contains(fn (array $page) => $page['is_ready'] === true),
                 'composeDefaults' => $this->composeDefaults($request),
                 'focus' => [
                     'tab' => $tab,
@@ -129,7 +132,9 @@ class SocialPostingController extends Controller
                 'metaAppId' => FacebookCredentials::appId(),
                 'metaAppSecret' => FacebookCredentials::appSecret(),
                 'metaRedirectUri' => FacebookCredentials::redirectUri(),
-                'canManagePages' => $user->hasPermission('content.publish'),
+                'canManageMeta' => $this->canManageMeta($user),
+                'canManagePages' => $this->canManageMeta($user),
+                'workspacePagesReady' => false,
                 'composeDefaults' => $this->composeDefaults($request),
                 'focus' => ['tab' => 'compose', 'post_id' => null],
                 'loadError' => $exception->getMessage(),
@@ -139,7 +144,7 @@ class SocialPostingController extends Controller
 
     public function saveMetaCredentials(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('content.publish'), 403);
+        abort_unless($this->canManageMeta($request->user()), 403);
 
         $data = $request->validate([
             'app_id' => ['required', 'string', 'max:64'],
@@ -165,7 +170,7 @@ class SocialPostingController extends Controller
 
     public function redirectToFacebook(Request $request, FacebookPublisher $publisher): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('content.publish'), 403);
+        abort_unless($this->canManageMeta($request->user()), 403);
 
         if (! FacebookCredentials::isConfigured()) {
             return redirect()
@@ -251,7 +256,7 @@ class SocialPostingController extends Controller
 
     public function refreshPages(Request $request, FacebookPublisher $publisher): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('content.publish'), 403);
+        abort_unless($this->canManageMeta($request->user()), 403);
 
         $data = $request->validate([
             'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
@@ -281,7 +286,7 @@ class SocialPostingController extends Controller
 
     public function destroyMeta(Request $request): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('content.publish'), 403);
+        abort_unless($this->canManageMeta($request->user()), 403);
 
         $request->user()->forceFill([
             'facebook_user_token' => null,
@@ -293,7 +298,7 @@ class SocialPostingController extends Controller
 
     public function updatePage(Request $request, SocialAccount $account): RedirectResponse
     {
-        abort_unless($request->user()->hasPermission('content.publish'), 403);
+        abort_unless($this->canManageMeta($request->user()), 403);
 
         $account->load('platform');
         abort_unless($account->platform?->slug === 'facebook', 404);
@@ -565,6 +570,42 @@ class SocialPostingController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * Who may connect/refresh Meta and toggle page Active.
+     * Publishers still post with shared page tokens without a personal Facebook login.
+     */
+    private function canManageMeta(User $user): bool
+    {
+        if ($user->isAdmin()) {
+            return true;
+        }
+
+        if (! $user->hasPermission('content.publish')) {
+            return false;
+        }
+
+        if (
+            $user->hasPermission('settings.manage')
+            || $user->hasPermission('settings.update')
+            || $user->hasPermission('platforms.manage')
+            || $user->hasPermission('users.manage')
+        ) {
+            return true;
+        }
+
+        // Keep refresh available for whoever originally connected Meta.
+        if ($user->hasFacebookConnection()) {
+            return true;
+        }
+
+        // First-time workspace setup only — once pages have tokens, teammates post without connecting.
+        return ! SocialAccount::query()
+            ->whereIn('brand_id', $user->accessibleBrandIds() ?: [0])
+            ->whereHas('platform', fn ($query) => $query->where('slug', 'facebook'))
+            ->get()
+            ->contains(fn (SocialAccount $account) => $account->isFacebookReady());
+    }
+
     private function presentPost(SocialPost $post): array
     {
         return [

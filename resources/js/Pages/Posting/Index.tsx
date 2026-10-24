@@ -101,6 +101,9 @@ export default function PostingIndex({
     metaAppId = '',
     metaAppSecret = '',
     metaRedirectUri = '',
+    canManageMeta = false,
+    canManagePages = false,
+    workspacePagesReady = false,
     composeDefaults,
     focus,
     loadError = null,
@@ -114,7 +117,9 @@ export default function PostingIndex({
     metaAppId?: string;
     metaAppSecret?: string;
     metaRedirectUri?: string;
-    canManagePages: boolean;
+    canManageMeta?: boolean;
+    canManagePages?: boolean;
+    workspacePagesReady?: boolean;
     composeDefaults?: ComposeDefaults | null;
     focus?: { tab?: TabId | null; post_id?: number | null } | null;
     loadError?: string | null;
@@ -422,7 +427,7 @@ export default function PostingIndex({
             <PageHeader
                 title="Posting"
                 description="Compose Facebook posts, review analytics, and choose which Pages appear in the dropdown."
-                actions={(
+                actions={canManageMeta ? (
                     <div className="flex flex-wrap gap-2">
                         {tab === 'pages' && metaConnected && (
                             <>
@@ -449,7 +454,7 @@ export default function PostingIndex({
                             </Button>
                         )}
                     </div>
-                )}
+                ) : undefined}
             />
 
             {loadError && (
@@ -506,16 +511,24 @@ export default function PostingIndex({
                             <div className="space-y-3">
                                 <p className="text-sm text-zinc-600">
                                     {pagesNeedingToken.length > 0
-                                        ? 'Your Facebook Pages are listed, but Page ID/access tokens are missing or expired. Open Page settings, Connect with Meta, then Refresh pages — those values fill in automatically from Meta (you never type them).'
+                                        ? canManageMeta
+                                            ? 'Your Facebook Pages are listed, but Page ID/access tokens are missing or expired. Open Page settings, Connect with Meta, then Refresh pages — those values fill in automatically from Meta (you never type them).'
+                                            : 'Facebook Pages need a fresh connection from an admin or manager. Ask them to reconnect Meta in Page settings — you can post with the shared workspace pages after that.'
                                         : hasAnyPages
-                                            ? 'No active pages yet. Mark at least one Connected page Active in Page settings.'
-                                            : metaConnected
-                                                ? 'No Pages loaded yet. Open Page settings and click Refresh pages.'
-                                                : 'Connect with Meta in Page settings to load the Pages you manage. Page ID and access token are filled automatically.'}
+                                            ? canManageMeta
+                                                ? 'No active pages yet. Mark at least one Connected page Active in Page settings.'
+                                                : 'No pages are Active for posting yet. Ask an admin or manager to turn a page Active in Page settings.'
+                                            : workspacePagesReady || metaConnected
+                                                ? 'No Pages loaded for your brands yet. Ask an admin or manager to refresh Facebook pages.'
+                                                : canManageMeta
+                                                    ? 'Connect with Meta in Page settings to load the Pages you manage. Page ID and access token are filled automatically.'
+                                                    : 'Posting uses the shared Facebook pages set up by an admin. Ask them to connect Meta once — you do not need your own Facebook login.'}
                                 </p>
-                                <Button type="button" variant="secondary" onClick={() => setTab('pages')}>
-                                    Open Page settings
-                                </Button>
+                                {(canManageMeta || hasAnyPages) && (
+                                    <Button type="button" variant="secondary" onClick={() => setTab('pages')}>
+                                        Open Page settings
+                                    </Button>
+                                )}
                             </div>
                         ) : (
                             <>
@@ -908,18 +921,22 @@ export default function PostingIndex({
                     <div className="border-b border-zinc-100 px-4 py-3">
                         <h2 className="font-semibold">Page settings</h2>
                         <p className="text-sm text-zinc-600">
-                            Page ID and access token are filled automatically when you Connect with Meta and Refresh pages. Turn pages Active to show them in Compose.
+                            {canManageMeta
+                                ? 'Page ID and access token are filled automatically when you Connect with Meta and Refresh pages. Turn pages Active to show them in Compose.'
+                                : 'These are the shared Facebook pages for your brands. An admin or manager connects Meta once — you can post without linking your own Facebook account.'}
                         </p>
                     </div>
 
-                    <MetaCredentialsPanel
-                        configured={metaConfigured}
-                        appId={metaAppId}
-                        appSecret={metaAppSecret}
-                        redirectUri={metaRedirectUri}
-                    />
+                    {canManageMeta && (
+                        <MetaCredentialsPanel
+                            configured={metaConfigured}
+                            appId={metaAppId}
+                            appSecret={metaAppSecret}
+                            redirectUri={metaRedirectUri}
+                        />
+                    )}
 
-                    {metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
+                    {canManageMeta && metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
                         <div className="m-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
                             <p className="font-medium">
                                 {!metaConnected
@@ -943,6 +960,15 @@ export default function PostingIndex({
                         </div>
                     )}
 
+                    {!canManageMeta && !hasAnyPages && (
+                        <div className="p-4">
+                            <EmptyState
+                                title="Waiting on shared pages"
+                                body="Ask an admin or manager to connect Meta and activate Facebook pages for your brand. You can post as soon as those pages are ready."
+                            />
+                        </div>
+                    )}
+
                     {hasAnyPages ? (
                         <ul className="divide-y divide-zinc-100">
                             {pages.map((page) => (
@@ -957,22 +983,29 @@ export default function PostingIndex({
                                             {page.is_ready ? 'Connected (token ready)' : 'Missing Page ID / token — reconnect Meta'}
                                             {' · '}
                                             {page.is_active ? 'Active for posting' : 'Inactive'}
+                                            {page.can_post === false ? ' · View only' : ''}
                                         </p>
                                     </div>
-                                    <label className="flex items-center gap-2 text-sm text-zinc-700">
-                                        <input
-                                            type="checkbox"
-                                            className="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-600"
-                                            checked={page.is_active}
-                                            disabled={!page.is_ready || togglingPageId === page.id}
-                                            onChange={(event) => togglePage(page, event.target.checked)}
-                                        />
-                                        {togglingPageId === page.id ? 'Saving…' : page.is_active ? 'Active' : 'Inactive'}
-                                    </label>
+                                    {canManagePages ? (
+                                        <label className="flex items-center gap-2 text-sm text-zinc-700">
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-600"
+                                                checked={page.is_active}
+                                                disabled={!page.is_ready || togglingPageId === page.id}
+                                                onChange={(event) => togglePage(page, event.target.checked)}
+                                            />
+                                            {togglingPageId === page.id ? 'Saving…' : page.is_active ? 'Active' : 'Inactive'}
+                                        </label>
+                                    ) : (
+                                        <span className={`text-xs font-medium ${page.is_active && page.is_ready ? 'text-emerald-700' : 'text-zinc-500'}`}>
+                                            {page.is_active && page.is_ready ? 'Ready to post' : page.is_active ? 'Needs token' : 'Inactive'}
+                                        </span>
+                                    )}
                                 </li>
                             ))}
                         </ul>
-                    ) : metaConnected ? (
+                    ) : canManageMeta && metaConnected ? (
                         <div className="p-4">
                             <EmptyState title="No pages loaded" body="Click Refresh pages to pull every Facebook Page you manage from Meta." />
                         </div>

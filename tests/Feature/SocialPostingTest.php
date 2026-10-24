@@ -391,29 +391,21 @@ class SocialPostingTest extends TestCase
         $this->assertDatabaseHas('social_posts', ['id' => $published->id]);
     }
 
-    public function test_publisher_cannot_post_to_unassigned_page(): void
+    public function test_publisher_cannot_post_to_page_outside_their_brands(): void
     {
         $brand = $this->makeBrand('Prime Z');
+        $other = $this->makeBrand('Other Brand');
         $manager = $this->makeUser('social_media_manager', $brand);
         $facebook = Platform::query()->where('slug', 'facebook')->firstOrFail();
 
-        $allowed = SocialAccount::query()->create([
-            'brand_id' => $brand->id,
-            'platform_id' => $facebook->id,
-            'name' => 'Allowed Page',
-            'external_id' => '111',
-            'access_token' => 'token-a',
-            'is_active' => true,
-        ]);
         $denied = SocialAccount::query()->create([
-            'brand_id' => $brand->id,
+            'brand_id' => $other->id,
             'platform_id' => $facebook->id,
-            'name' => 'Denied Page',
+            'name' => 'Other Brand Page',
             'external_id' => '222',
             'access_token' => 'token-b',
             'is_active' => true,
         ]);
-        $manager->socialAccounts()->sync([$allowed->id]);
 
         $this->actingAs($manager)->post('/posting', [
             'social_account_id' => $denied->id,
@@ -422,6 +414,56 @@ class SocialPostingTest extends TestCase
             'publish_mode' => 'now',
             'media' => [UploadedFile::fake()->image('poster.jpg', 200, 200)],
         ])->assertForbidden();
+    }
+
+    public function test_creative_with_posting_permission_uses_shared_workspace_pages_without_meta_login(): void
+    {
+        $brand = $this->makeBrand('Prime Z');
+        $creative = $this->makeUser('creative', $brand);
+        $facebook = Platform::query()->where('slug', 'facebook')->firstOrFail();
+        $role = $creative->roles()->firstOrFail();
+        $permissionIds = \App\Models\Permission::query()
+            ->whereIn('slug', array_merge(
+                $role->permissions()->pluck('slug')->all(),
+                ['posting.view', 'posting.create', 'content.publish'],
+            ))
+            ->pluck('id');
+        $role->permissions()->sync($permissionIds);
+
+        $account = SocialAccount::query()->create([
+            'brand_id' => $brand->id,
+            'platform_id' => $facebook->id,
+            'name' => 'Shared Page',
+            'external_id' => '999888777',
+            'access_token' => 'shared-page-token',
+            'is_active' => true,
+        ]);
+
+        $this->assertFalse($creative->fresh()->hasFacebookConnection());
+        $this->assertTrue($creative->fresh()->canAccessSocialAccount($account->id));
+
+        Http::fake([
+            'graph.facebook.com/*' => Http::response(['id' => 'photo1', 'post_id' => '999888777_1'], 200),
+        ]);
+
+        $this->actingAs($creative->fresh())->get('/posting')->assertOk()->assertInertia(fn ($page) => $page
+            ->where('pages.0.can_post', true)
+            ->where('canManageMeta', false)
+        );
+
+        $this->actingAs($creative->fresh())->post('/posting', [
+            'social_account_id' => $account->id,
+            'caption' => 'Posted with shared workspace pages',
+            'media_type' => 'image',
+            'publish_mode' => 'now',
+            'media' => [UploadedFile::fake()->image('poster.jpg', 200, 200)],
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('social_posts', [
+            'social_account_id' => $account->id,
+            'user_id' => $creative->id,
+            'status' => 'published',
+        ]);
     }
 
     public function test_publisher_can_post_multiple_images_as_one_facebook_post(): void
