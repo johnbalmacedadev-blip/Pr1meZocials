@@ -2,12 +2,15 @@
 /node_modules
 # public/build and vendor are committed so shared hosting can deploy without SSH/composer/npm
 /public/hot
-/public/storage
 /storage/*.key
 /storage/pail
-.env
+/storage/framework/install.lock
+/storage/logs/*.log
+# Production .env is committed for pull-and-run shared hosting.
+# Keep machine-specific overrides in .env.local (copy over .env locally when developing).
+.env.local
 .env.backup
-.env.production
+.env.production.ready
 .phpactor.json
 .phpunit.result.cache
 Homestead.json

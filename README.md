@@ -13,6 +13,12 @@ Social metrics are entered by hand. This application does not connect to Faceboo
 
 This project uses Laravel 12 (PHP 8.2–8.5). Shared hosting and local XAMPP with PHP 8.4 are supported. MariaDB/MySQL from XAMPP can still be used for the database.
 
+## Shared hosting (cPanel Git)
+
+Pull `main`. The repo already includes `vendor`, `public/build`, and a production `.env`. Opening the site once runs migrations and seeders automatically — no SSH, Composer, npm, or browser installer.
+
+Default login after first load: username `admin` / password `admin`.
+
 ## Local setup
 
 ```bash
@@ -22,12 +28,11 @@ cp .env.example .env
 php artisan key:generate
 ```
 
-Create the database, then set `DB_*` in `.env`. The XAMPP defaults used in development are database `primez_creative_ops`, user `root`, and an empty password.
+Create the database, then set local `DB_*` in `.env` (XAMPP defaults: `primez_creative_ops` / `root` / empty password). Keep a backup as `.env.local` if you need to switch back after pulling production `.env`.
 
 ```bash
 php artisan migrate --seed
-php artisan storage:link
-npm run dev
+npm run build
 php artisan serve
 ```
 

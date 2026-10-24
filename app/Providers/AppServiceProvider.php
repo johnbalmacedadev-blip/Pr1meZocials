@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Support\EnsureProductionReady;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -19,6 +20,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        EnsureProductionReady::run();
+
         $appUrl = (string) config('app.url');
         if ($appUrl !== '') {
             URL::forceRootUrl(rtrim($appUrl, '/'));
