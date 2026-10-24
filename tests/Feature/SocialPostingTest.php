@@ -155,7 +155,48 @@ class SocialPostingTest extends TestCase
         $this->assertTrue(FacebookCredentials::isConfigured());
         $this->assertSame('2163291234576981', FacebookCredentials::appId());
         $this->assertSame('live-app-secret', FacebookCredentials::appSecret());
+
+        $this->actingAs($manager)->get('/posting?tab=pages')->assertInertia(fn ($page) => $page
+            ->component('Posting/Index')
+            ->where('metaAppSecret', 'live-app-secret')
+            ->where('metaConfigured', true));
+
         @unlink(FacebookCredentials::path());
+    }
+
+    public function test_meta_oauth_accepts_signed_state_without_session(): void
+    {
+        $brand = $this->makeBrand('Prime Z');
+        $manager = $this->makeUser('social_media_manager', $brand);
+
+        Http::fake([
+            'graph.facebook.com/*/oauth/access_token*' => Http::sequence()
+                ->push(['access_token' => 'short-user-token', 'expires_in' => 3600], 200)
+                ->push(['access_token' => 'long-user-token', 'expires_in' => 5184000], 200),
+            'graph.facebook.com/*/me/accounts*' => Http::response([
+                'data' => [
+                    [
+                        'id' => '333',
+                        'name' => 'Signed State Page',
+                        'access_token' => 'page-token-c',
+                        'username' => null,
+                        'link' => 'https://www.facebook.com/333',
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $state = FacebookCredentials::makeOAuthState((int) $manager->id);
+
+        $this->actingAs($manager)
+            ->get('/posting/facebook/callback?code=meta-code&state='.$state)
+            ->assertRedirect(route('posting.index', ['tab' => 'pages']));
+
+        $this->assertTrue($manager->fresh()->hasFacebookConnection());
+        $this->assertDatabaseHas('social_accounts', [
+            'external_id' => '333',
+            'name' => 'Signed State Page',
+        ]);
     }
 
     public function test_meta_oauth_callback_syncs_all_managed_pages(): void

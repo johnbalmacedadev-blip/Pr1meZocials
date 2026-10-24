@@ -15,7 +15,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -103,6 +102,7 @@ class SocialPostingController extends Controller
                 'metaConnected' => $user->hasFacebookConnection(),
                 'metaConfigured' => FacebookCredentials::isConfigured(),
                 'metaAppId' => FacebookCredentials::appId(),
+                'metaAppSecret' => FacebookCredentials::appSecret(),
                 'metaRedirectUri' => FacebookCredentials::redirectUri(),
                 'canManagePages' => $user->hasPermission('content.publish'),
                 'composeDefaults' => $this->composeDefaults($request),
@@ -127,6 +127,7 @@ class SocialPostingController extends Controller
                 'metaConnected' => false,
                 'metaConfigured' => FacebookCredentials::isConfigured(),
                 'metaAppId' => FacebookCredentials::appId(),
+                'metaAppSecret' => FacebookCredentials::appSecret(),
                 'metaRedirectUri' => FacebookCredentials::redirectUri(),
                 'canManagePages' => $user->hasPermission('content.publish'),
                 'composeDefaults' => $this->composeDefaults($request),
@@ -142,10 +143,20 @@ class SocialPostingController extends Controller
 
         $data = $request->validate([
             'app_id' => ['required', 'string', 'max:64'],
-            'app_secret' => ['required', 'string', 'max:255'],
+            'app_secret' => [
+                FacebookCredentials::appSecret() !== '' ? 'nullable' : 'required',
+                'string',
+                'max:255',
+            ],
         ]);
 
-        FacebookCredentials::save($data['app_id'], $data['app_secret']);
+        FacebookCredentials::save($data['app_id'], (string) ($data['app_secret'] ?? ''));
+
+        if (! FacebookCredentials::isConfigured()) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages'])
+                ->with('error', 'App Secret is required. Paste it from Meta Developer → Settings → Basic.');
+        }
 
         return redirect()
             ->route('posting.index', ['tab' => 'pages'])
@@ -162,10 +173,10 @@ class SocialPostingController extends Controller
                 ->with('error', 'Save your Facebook App ID and App Secret in Page settings first.');
         }
 
-        $state = Str::random(40);
+        $state = FacebookCredentials::makeOAuthState((int) $request->user()->id);
+        // Keep legacy backups; signed state is what actually survives shared hosting.
         $request->session()->put('facebook_oauth_state', $state);
-        // Cache backup: shared-hosting file sessions sometimes drop across the Meta redirect.
-        Cache::put('facebook_oauth_state:'.$state, (int) $request->user()->id, now()->addMinutes(20));
+        Cache::put('facebook_oauth_state:'.$state, (int) $request->user()->id, now()->addMinutes(30));
 
         try {
             return redirect()->away($publisher->oauthUrl($state));
@@ -187,11 +198,13 @@ class SocialPostingController extends Controller
         }
 
         $state = (string) $request->input('state');
+        $userId = (int) $request->user()->id;
         $expected = (string) $request->session()->pull('facebook_oauth_state');
         $cachedUserId = $state !== '' ? Cache::pull('facebook_oauth_state:'.$state) : null;
         $stateOk = $state !== '' && (
-            ($expected !== '' && hash_equals($expected, $state))
-            || ((int) $cachedUserId === (int) $request->user()->id)
+            FacebookCredentials::oauthStateIsValid($state, $userId)
+            || ($expected !== '' && hash_equals($expected, $state))
+            || ((int) $cachedUserId === $userId)
         );
 
         if (! $stateOk) {

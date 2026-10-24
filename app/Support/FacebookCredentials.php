@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 
 /**
  * Meta app credentials for shared hosting.
@@ -74,14 +75,65 @@ class FacebookCredentials
             mkdir($directory, 0775, true);
         }
 
+        $secret = trim($appSecret);
+        // Keep the previously saved secret when the form submits an empty field.
+        if ($secret === '') {
+            $secret = self::appSecret();
+        }
+
         file_put_contents(
             self::path(),
             json_encode([
                 'app_id' => trim($appId),
-                'app_secret' => trim($appSecret),
+                'app_secret' => $secret,
                 'updated_at' => date('c'),
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n",
             LOCK_EX
         );
+    }
+
+    /**
+     * Signed OAuth state — survives lost sessions/cache on shared hosting.
+     */
+    public static function makeOAuthState(int $userId): string
+    {
+        $body = rtrim(strtr(base64_encode((string) json_encode([
+            'uid' => $userId,
+            'exp' => now()->addMinutes(30)->timestamp,
+            'n' => Str::random(24),
+        ])), '+/', '-_'), '=');
+
+        return $body.'.'.hash_hmac('sha256', $body, self::signingKey());
+    }
+
+    public static function oauthStateIsValid(string $state, int $userId): bool
+    {
+        $parts = explode('.', $state, 2);
+        if (count($parts) !== 2 || $parts[0] === '' || $parts[1] === '') {
+            return false;
+        }
+
+        [$body, $signature] = $parts;
+        $expected = hash_hmac('sha256', $body, self::signingKey());
+        if (! hash_equals($expected, $signature)) {
+            return false;
+        }
+
+        $json = base64_decode(strtr($body, '-_', '+/'), true);
+        $payload = json_decode($json !== false ? $json : 'null', true);
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        if ((int) ($payload['uid'] ?? 0) !== $userId) {
+            return false;
+        }
+
+        return (int) ($payload['exp'] ?? 0) >= time();
+    }
+
+    private static function signingKey(): string
+    {
+        return (string) config('app.key');
     }
 }

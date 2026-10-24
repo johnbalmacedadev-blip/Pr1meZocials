@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { Eye, Heart, ImagePlus, MessageCircle, Pencil, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
+import { Eye, EyeOff, Heart, ImagePlus, MessageCircle, Pencil, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { EmojiPickerButton } from '@/Components/EmojiPicker';
 import FacebookGlyph from '@/Components/FacebookGlyph';
@@ -99,6 +99,7 @@ export default function PostingIndex({
     metaConnected,
     metaConfigured,
     metaAppId = '',
+    metaAppSecret = '',
     metaRedirectUri = '',
     composeDefaults,
     focus,
@@ -111,6 +112,7 @@ export default function PostingIndex({
     metaConnected: boolean;
     metaConfigured: boolean;
     metaAppId?: string;
+    metaAppSecret?: string;
     metaRedirectUri?: string;
     canManagePages: boolean;
     composeDefaults?: ComposeDefaults | null;
@@ -912,6 +914,7 @@ export default function PostingIndex({
                     <MetaCredentialsPanel
                         configured={metaConfigured}
                         appId={metaAppId}
+                        appSecret={metaAppSecret}
                         redirectUri={metaRedirectUri}
                     />
 
@@ -982,23 +985,32 @@ export default function PostingIndex({
 function MetaCredentialsPanel({
     configured,
     appId,
+    appSecret,
     redirectUri,
 }: {
     configured: boolean;
     appId: string;
+    appSecret: string;
     redirectUri: string;
 }) {
     const basePath = usePage<SharedProps>().props.basePath ?? '';
+    const [showSecret, setShowSecret] = useState(false);
     const form = useForm({
         app_id: appId || '',
-        app_secret: '',
+        app_secret: appSecret || '',
     });
+
+    useEffect(() => {
+        form.setData({
+            app_id: appId || '',
+            app_secret: appSecret || '',
+        });
+    }, [appId, appSecret]);
 
     function save(event: FormEvent) {
         event.preventDefault();
         form.post('/posting/facebook/credentials', {
             preserveScroll: true,
-            onSuccess: () => form.setData('app_secret', ''),
         });
     }
 
@@ -1035,14 +1047,26 @@ function MetaCredentialsPanel({
                     />
                 </Field>
                 <Field label="App Secret" error={form.errors.app_secret}>
-                    <Input
-                        type="password"
-                        value={form.data.app_secret}
-                        onChange={(event) => form.setData('app_secret', event.target.value)}
-                        placeholder={configured ? 'Enter secret to update' : 'Facebook App Secret'}
-                        required
-                        autoComplete="new-password"
-                    />
+                    <div className="relative">
+                        <Input
+                            type={showSecret ? 'text' : 'password'}
+                            value={form.data.app_secret}
+                            onChange={(event) => form.setData('app_secret', event.target.value)}
+                            placeholder="Facebook App Secret"
+                            required={!configured}
+                            autoComplete="off"
+                            className="pr-10"
+                        />
+                        <button
+                            type="button"
+                            className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500 hover:text-zinc-800"
+                            onClick={() => setShowSecret((open) => !open)}
+                            aria-label={showSecret ? 'Hide app secret' : 'Show app secret'}
+                            title={showSecret ? 'Hide' : 'Show'}
+                        >
+                            {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                    </div>
                 </Field>
                 <div className="sm:col-span-2">
                     <Button type="submit" size="sm" disabled={form.processing}>
