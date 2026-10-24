@@ -127,6 +127,7 @@ export default function PostingIndex({
     }, []);
     const fromSchedule = Boolean(composeDefaults?.return_to?.startsWith('/posting-schedule') || composeDefaults?.slot);
     const postForm = useForm({
+        draft_id: '',
         social_account_id: managedPages[0] ? String(managedPages[0].id) : '',
         caption: composeDefaults?.caption ?? '',
         media_type: (composeDefaults?.media_type ?? 'image') as 'image' | 'video',
@@ -136,6 +137,8 @@ export default function PostingIndex({
         scheduled_publish_at: composeDefaults?.scheduled_publish_at ?? '',
         return_to: composeDefaults?.return_to ?? '',
     });
+    const editingDraftId = postForm.data.draft_id ? Number(postForm.data.draft_id) : null;
+    const editingDraft = editingDraftId ? posts.find((post) => post.id === editingDraftId) ?? null : null;
     const [tab, setTab] = useState<TabId>(() => {
         if (focus?.tab === 'history' || focus?.tab === 'pages' || focus?.tab === 'compose') {
             return focus.tab;
@@ -171,6 +174,8 @@ export default function PostingIndex({
     const selectedPage = managedPages.find((page) => String(page.id) === postForm.data.social_account_id) ?? null;
     const mediaFiles = postForm.data.media;
     const hasMedia = mediaFiles.length > 0;
+    const hasReusableDraftMedia = Boolean(editingDraft && (editingDraft.media_count ?? 0) > 0 && !hasMedia);
+    const canSubmitMedia = hasMedia || hasReusableDraftMedia;
 
     useEffect(() => {
         const stillManaged = managedPages.some((page) => String(page.id) === postForm.data.social_account_id);
@@ -197,9 +202,10 @@ export default function PostingIndex({
                 if (postForm.data.return_to?.startsWith('/posting-schedule')) {
                     return;
                 }
-                postForm.reset('caption', 'media', 'content_item_id', 'scheduled_publish_at');
                 postForm.setData({
-                    ...postForm.data,
+                    draft_id: '',
+                    social_account_id: managedPages[0] ? String(managedPages[0].id) : postForm.data.social_account_id,
+                    caption: '',
                     media: [],
                     media_type: 'image',
                     content_item_id: '',
@@ -208,6 +214,64 @@ export default function PostingIndex({
                     return_to: '',
                 });
                 setTab('history');
+            },
+        });
+    }
+
+    function editDraft(post: PostRow) {
+        const pageStillManaged = managedPages.some((page) => page.id === post.page?.id);
+        postForm.clearErrors();
+        postForm.setData({
+            draft_id: String(post.id),
+            social_account_id: pageStillManaged && post.page ? String(post.page.id) : (managedPages[0] ? String(managedPages[0].id) : ''),
+            caption: post.caption ?? '',
+            media_type: post.media_type,
+            media: [],
+            content_item_id: post.content ? String(post.content.id) : '',
+            publish_mode: post.scheduled_publish_at ? 'schedule' : 'now',
+            scheduled_publish_at: post.scheduled_publish_at
+                ? toLocalInputValue(new Date(post.scheduled_publish_at))
+                : '',
+            return_to: '',
+        });
+        setEditingPostId(null);
+        setTab('compose');
+    }
+
+    function clearDraftEdit() {
+        postForm.setData({
+            ...postForm.data,
+            draft_id: '',
+            caption: '',
+            media: [],
+            media_type: 'image',
+            content_item_id: '',
+            publish_mode: 'now',
+            scheduled_publish_at: '',
+            return_to: '',
+        });
+        postForm.clearErrors();
+    }
+
+    async function deleteHistoryPost(post: PostRow) {
+        const isDraft = post.status === 'draft';
+        const ok = await confirmAction({
+            title: isDraft ? 'Delete draft?' : 'Delete failed post?',
+            message: isDraft
+                ? 'Remove this draft from history? Saved media for it will be deleted.'
+                : 'Remove this failed post from history? This cannot be undone.',
+            confirmLabel: 'Delete',
+        });
+        if (!ok) {
+            return;
+        }
+        router.delete(`/posting/${post.id}`, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                if (String(postForm.data.draft_id) === String(post.id)) {
+                    clearDraftEdit();
+                }
             },
         });
     }
@@ -405,7 +469,20 @@ export default function PostingIndex({
             {tab === 'compose' && (
                 <div className="grid gap-4 xl:grid-cols-[22rem_minmax(0,1fr)]">
                     <form className="space-y-3 rounded-xl border border-zinc-200 bg-white p-4" onSubmit={submitPost}>
-                        <h2 className="font-semibold">New Facebook post</h2>
+                        <h2 className="font-semibold">{editingDraft ? 'Resume draft' : 'New Facebook post'}</h2>
+                        {editingDraft && (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                                <p className="font-medium">Editing draft #{editingDraft.id}</p>
+                                <p className="mt-0.5">
+                                    {(editingDraft.media_count ?? 0) > 0
+                                        ? `Existing media (${editingDraft.media_count} file${(editingDraft.media_count ?? 0) === 1 ? '' : 's'}) will be reused unless you attach new files.`
+                                        : 'Attach media before posting this draft.'}
+                                </p>
+                                <button type="button" className="mt-2 text-xs font-medium text-brand-700 hover:underline" onClick={clearDraftEdit}>
+                                    Cancel draft edit
+                                </button>
+                            </div>
+                        )}
                         {fromSchedule && composeDefaults?.slot_label && (
                             <div className="rounded-lg border border-brand-200 bg-brand-50 px-3 py-2 text-sm text-brand-900">
                                 <p className="font-medium">From posting schedule</p>
@@ -510,10 +587,18 @@ export default function PostingIndex({
                                                 : `${mediaFiles.length} images`}
                                     </p>
                                 )}
-                                <Button type="submit" disabled={postForm.processing || !hasMedia} className="w-full">
+                                {hasReusableDraftMedia && (
+                                    <p className="text-xs text-zinc-500">
+                                        Media: reusing {editingDraft?.media_count} saved draft file{(editingDraft?.media_count ?? 0) === 1 ? '' : 's'}
+                                        {editingDraft?.media_name ? ` (${editingDraft.media_name})` : ''}
+                                    </p>
+                                )}
+                                <Button type="submit" disabled={postForm.processing || !canSubmitMedia} className="w-full">
                                     {postForm.processing
                                         ? (postForm.data.publish_mode === 'schedule' ? 'Scheduling on Facebook…' : 'Posting to Facebook…')
-                                        : (postForm.data.publish_mode === 'schedule' ? 'Schedule on Facebook' : 'Post now')}
+                                        : editingDraft
+                                            ? (postForm.data.publish_mode === 'schedule' ? 'Schedule draft on Facebook' : 'Post draft now')
+                                            : (postForm.data.publish_mode === 'schedule' ? 'Schedule on Facebook' : 'Post now')}
                                 </Button>
                             </>
                         )}
@@ -682,7 +767,9 @@ export default function PostingIndex({
                         <ul className="divide-y divide-zinc-100">
                             {posts.map((post) => {
                                 const isFocused = focus?.post_id === post.id;
-                                const canEdit = post.status === 'published' || post.status === 'scheduled';
+                                const canEditCaption = post.status === 'published' || post.status === 'scheduled';
+                                const canEditDraft = post.status === 'draft';
+                                const canDelete = post.status === 'draft' || post.status === 'failed';
                                 return (
                                     <li
                                         key={post.id}
@@ -708,7 +795,7 @@ export default function PostingIndex({
                                                         Linked content: {post.content.reference_number} · {post.content.title}
                                                     </Link>
                                                 )}
-                                                {editingPostId === post.id && canEdit ? (
+                                                {editingPostId === post.id && canEditCaption ? (
                                                     <HistoryCaptionEditor
                                                         post={post}
                                                         onCancel={() => setEditingPostId(null)}
@@ -720,7 +807,18 @@ export default function PostingIndex({
                                                 {post.error_message && <p className="mt-1 text-sm text-rose-700">{post.error_message}</p>}
                                             </div>
                                             <div className="flex items-center gap-1">
-                                                {canEdit && editingPostId !== post.id && (
+                                                {canEditDraft && (
+                                                    <button
+                                                        type="button"
+                                                        aria-label="Edit draft in Compose"
+                                                        title="Edit draft in Compose"
+                                                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
+                                                        onClick={() => editDraft(post)}
+                                                    >
+                                                        <Pencil className="h-4 w-4" />
+                                                    </button>
+                                                )}
+                                                {canEditCaption && editingPostId !== post.id && (
                                                     <button
                                                         type="button"
                                                         aria-label="Edit caption"
@@ -753,25 +851,13 @@ export default function PostingIndex({
                                                         <RefreshCw className="h-3.5 w-3.5" /> Refresh metrics
                                                     </Button>
                                                 )}
-                                                {post.status === 'failed' && (
+                                                {canDelete && (
                                                     <button
                                                         type="button"
-                                                        aria-label="Delete failed post"
-                                                        title="Delete failed post"
+                                                        aria-label={post.status === 'draft' ? 'Delete draft' : 'Delete failed post'}
+                                                        title={post.status === 'draft' ? 'Delete draft' : 'Delete failed post'}
                                                         className="rounded-md p-1.5 text-zinc-500 hover:bg-rose-50 hover:text-rose-700"
-                                                        onClick={async () => {
-                                                            const ok = await confirmAction({
-                                                                title: 'Delete failed post?',
-                                                                message: 'Remove this failed post from history? This cannot be undone.',
-                                                                confirmLabel: 'Delete',
-                                                            });
-                                                            if (ok) {
-                                                                router.delete(`/posting/${post.id}`, {
-                                                                    preserveScroll: true,
-                                                                    preserveState: true,
-                                                                });
-                                                            }
-                                                        }}
+                                                        onClick={() => { void deleteHistoryPost(post); }}
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </button>

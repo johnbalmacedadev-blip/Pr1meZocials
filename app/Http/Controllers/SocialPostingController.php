@@ -271,6 +271,7 @@ class SocialPostingController extends Controller
         }
 
         $data = $request->validate([
+            'draft_id' => ['nullable', 'integer', 'exists:social_posts,id'],
             'social_account_id' => ['required', 'integer', 'exists:social_accounts,id'],
             'caption' => ['required', 'string', 'max:5000'],
             'media_type' => ['required', Rule::in(['image', 'video'])],
@@ -283,7 +284,7 @@ class SocialPostingController extends Controller
                 'after:'.now()->addMinutes(9)->toDateTimeString(),
                 'before:'.now()->addDays(75)->toDateTimeString(),
             ],
-            'media' => ['required', 'array', 'min:1', 'max:10'],
+            'media' => ['nullable', 'array', 'max:10'],
             'media.*' => [
                 'required',
                 'file',
@@ -299,16 +300,35 @@ class SocialPostingController extends Controller
             is_array($request->file('media')) ? $request->file('media') : [$request->file('media')],
         ));
 
-        if ($data['media_type'] === 'video' && count($files) !== 1) {
+        $draft = null;
+        if (! empty($data['draft_id'])) {
+            $draft = SocialPost::query()->findOrFail((int) $data['draft_id']);
+            abort_unless($draft->status === 'draft', 422, 'Only draft posts can be resumed from Compose.');
+            abort_unless((int) $draft->user_id === (int) $request->user()->id || $request->user()->isAdmin(), 403);
+            $draft->load('account.platform');
+            abort_unless($draft->account?->platform?->slug === 'facebook', 404);
+            abort_unless($request->user()->canAccessBrand($draft->account->brand_id), 403);
+            abort_unless($request->user()->canAccessSocialAccount($draft->account->id), 403);
+        }
+
+        if ($files === [] && $draft === null) {
             throw ValidationException::withMessages([
-                'media' => 'Only one video can be posted at a time.',
+                'media' => 'Attach at least one image or video.',
             ]);
         }
 
-        if ($data['media_type'] === 'image' && count($files) > 10) {
-            throw ValidationException::withMessages([
-                'media' => 'You can attach up to 10 images in one post.',
-            ]);
+        if ($files !== []) {
+            if ($data['media_type'] === 'video' && count($files) !== 1) {
+                throw ValidationException::withMessages([
+                    'media' => 'Only one video can be posted at a time.',
+                ]);
+            }
+
+            if ($data['media_type'] === 'image' && count($files) > 10) {
+                throw ValidationException::withMessages([
+                    'media' => 'You can attach up to 10 images in one post.',
+                ]);
+            }
         }
 
         $account = SocialAccount::query()->with('platform')->findOrFail($data['social_account_id']);
@@ -327,12 +347,28 @@ class SocialPostingController extends Controller
             ? Carbon::parse($data['scheduled_publish_at'])
             : null;
 
-        $mediaFiles = [];
-        foreach ($files as $file) {
-            $mediaFiles[] = [
-                'path' => $file->store('social-posts/'.$request->user()->id, 'local'),
-                'name' => $file->getClientOriginalName(),
-            ];
+        if ($files !== []) {
+            if ($draft) {
+                $oldPaths = array_column($draft->mediaItems(), 'path');
+                if ($oldPaths !== []) {
+                    Storage::disk('local')->delete($oldPaths);
+                }
+            }
+
+            $mediaFiles = [];
+            foreach ($files as $file) {
+                $mediaFiles[] = [
+                    'path' => $file->store('social-posts/'.$request->user()->id, 'local'),
+                    'name' => $file->getClientOriginalName(),
+                ];
+            }
+        } else {
+            $mediaFiles = $draft?->mediaItems() ?? [];
+            if ($mediaFiles === []) {
+                throw ValidationException::withMessages([
+                    'media' => 'This draft has no media left. Attach at least one image or video.',
+                ]);
+            }
         }
 
         $first = $mediaFiles[0];
@@ -340,7 +376,7 @@ class SocialPostingController extends Controller
             ? $first['name']
             : $first['name'].' + '.(count($mediaFiles) - 1).' more';
 
-        $post = SocialPost::query()->create([
+        $attributes = [
             'social_account_id' => $account->id,
             'user_id' => $request->user()->id,
             'content_item_id' => $contentItemId,
@@ -351,7 +387,15 @@ class SocialPostingController extends Controller
             'media_files' => $mediaFiles,
             'status' => 'draft',
             'scheduled_publish_at' => $scheduleAt,
-        ]);
+            'error_message' => null,
+        ];
+
+        if ($draft) {
+            $draft->fill($attributes)->save();
+            $post = $draft->fresh();
+        } else {
+            $post = SocialPost::query()->create($attributes);
+        }
 
         try {
             $published = $publisher->publish($post);
@@ -438,8 +482,13 @@ class SocialPostingController extends Controller
         abort_unless($post->account?->platform?->slug === 'facebook', 404);
         abort_unless($request->user()->canAccessBrand($post->account->brand_id), 403);
         abort_unless($request->user()->canAccessSocialAccount($post->account->id), 403);
-        abort_unless($post->status === 'failed', 422, 'Only failed posts can be deleted from history.');
+        abort_unless(
+            in_array($post->status, ['failed', 'draft'], true),
+            422,
+            'Only draft or failed posts can be deleted from history.'
+        );
 
+        $wasDraft = $post->status === 'draft';
         $paths = array_column($post->mediaItems(), 'path');
         if ($paths !== []) {
             Storage::disk('local')->delete($paths);
@@ -447,7 +496,7 @@ class SocialPostingController extends Controller
 
         $post->delete();
 
-        return back()->with('success', 'Failed post removed from history.');
+        return back()->with('success', $wasDraft ? 'Draft removed.' : 'Failed post removed from history.');
     }
 
     /**
