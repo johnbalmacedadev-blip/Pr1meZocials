@@ -1,0 +1,7 @@
+---
+# Repo checkout IS the live site (/.../pr1mesocials). Update from Remote
+# already refreshes the app; Deploy just confirms a clean tree and runs this.
+deployment:
+  tasks:
+    - /bin/echo "Prime Z pull-and-run: files are already in place after Update from Remote."
+    - /bin/chmod -R u+rwX storage bootstrap/cache || true
