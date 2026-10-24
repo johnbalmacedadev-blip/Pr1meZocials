@@ -11,10 +11,12 @@ DirectoryIndex index.php
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Vite build, storage, and other assets that live under /public.
-    RewriteCond public/$1 -f [OR]
-    RewriteCond public/$1 -d
-    RewriteRule ^(.*)$ public/$1 [L]
+    # Vite/CSS/JS and other public assets. Explicit rules — relative "-f" checks
+    # fail on some cPanel subdirectory setups and left /build/* as blank-page 404s.
+    RewriteRule ^build/(.*)$ public/build/$1 [L]
+    RewriteRule ^storage/(.*)$ public/storage/$1 [L]
+    RewriteRule ^brand/(.*)$ public/brand/$1 [L]
+    RewriteRule ^favicon\.ico$ public/favicon.ico [L]
 
     # App routes through the root front controller so SCRIPT_NAME stays
     # /pr1mesocials/index.php and Laravel sees /login (not /pr1mesocials/login).
