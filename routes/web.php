@@ -8,6 +8,7 @@ use App\Http\Controllers\ContentItemController;
 use App\Http\Controllers\ContentWorkflowController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\InspirationController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\PlatformVersionController;
@@ -22,6 +23,9 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInviteController;
 use App\Http\Controllers\TaskNoteController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
+Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');

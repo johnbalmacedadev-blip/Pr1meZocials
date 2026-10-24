@@ -988,6 +988,7 @@ function MetaCredentialsPanel({
     appId: string;
     redirectUri: string;
 }) {
+    const basePath = usePage<SharedProps>().props.basePath ?? '';
     const form = useForm({
         app_id: appId || '',
         app_secret: '',
@@ -1016,6 +1017,12 @@ function MetaCredentialsPanel({
                         {redirectUri}
                     </code>
                 ) : null}
+                <p className="mt-2 text-xs opacity-90">
+                    Also set Privacy Policy URL and Terms of Service URL in Meta App settings to:{' '}
+                    <a className="font-medium underline" href={withBase('/privacy', basePath)} target="_blank" rel="noreferrer">Privacy Policy</a>
+                    {' · '}
+                    <a className="font-medium underline" href={withBase('/terms', basePath)} target="_blank" rel="noreferrer">Terms of Service</a>
+                </p>
             </div>
             <form className="grid gap-2 sm:grid-cols-2" onSubmit={save}>
                 <Field label="App ID" error={form.errors.app_id}>

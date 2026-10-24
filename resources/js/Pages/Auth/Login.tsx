@@ -1,9 +1,12 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { FormEvent } from 'react';
 import { Button, Card, Field, Input } from '@/Components/ui';
 import GuestLayout from '@/Layouts/GuestLayout';
+import { withBase } from '@/lib/utils';
+import type { SharedProps } from '@/types';
 
 export default function Login() {
+    const basePath = usePage<SharedProps>().props.basePath ?? '';
     const form = useForm({ email: '', password: '', remember: false });
 
     function submit(event: FormEvent) {
@@ -31,6 +34,11 @@ export default function Login() {
                     <Button type="submit" disabled={form.processing} className="w-full">{form.processing ? 'Signing in…' : 'Sign in'}</Button>
                 </form>
             </Card>
+            <p className="mt-4 text-center text-xs text-zinc-500">
+                <Link href={withBase('/privacy', basePath)} className="hover:text-zinc-800">Privacy Policy</Link>
+                {' · '}
+                <Link href={withBase('/terms', basePath)} className="hover:text-zinc-800">Terms of Service</Link>
+            </p>
         </GuestLayout>
     );
 }
