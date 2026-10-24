@@ -21,4 +21,12 @@ if (! is_file($publicIndex)) {
     exit;
 }
 
+// If Apache still routed through /public/index.php, normalize SCRIPT_NAME so
+// subdirectory installs resolve /login instead of /pr1mesocials/login.
+foreach (['SCRIPT_NAME', 'PHP_SELF'] as $serverKey) {
+    if (! empty($_SERVER[$serverKey]) && str_contains((string) $_SERVER[$serverKey], '/public/')) {
+        $_SERVER[$serverKey] = str_replace('/public/', '/', (string) $_SERVER[$serverKey]);
+    }
+}
+
 require $publicIndex;

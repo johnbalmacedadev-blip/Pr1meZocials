@@ -1,16 +1,22 @@
-DirectoryIndex index.php public/index.php
+DirectoryIndex index.php
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Already inside /public — stop rewriting (avoids loops on shared hosting).
+    # Someone hitting /public/... directly — let public/.htaccess handle it.
     RewriteRule ^public/ - [L]
 
-    # Existing files/folders at project root (e.g. this index.php) can be served.
+    # Real files/folders in the project root (this index.php, robots.txt, etc.).
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d
     RewriteRule ^ - [L]
 
-    # Everything else goes through Laravel's public front controller.
+    # Vite build, storage, and other assets that live under /public.
+    RewriteCond public/$1 -f [OR]
+    RewriteCond public/$1 -d
     RewriteRule ^(.*)$ public/$1 [L]
+
+    # App routes through the root front controller so SCRIPT_NAME stays
+    # /pr1mesocials/index.php and Laravel sees /login (not /pr1mesocials/login).
+    RewriteRule ^ index.php [L]
 </IfModule>
