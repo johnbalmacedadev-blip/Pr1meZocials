@@ -2,19 +2,25 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\AdminNewUserRegisteredMail;
+use App\Mail\WelcomeNewUserMail;
 use App\Models\Brand;
 use App\Models\Role;
+use App\Models\Setting;
 use App\Models\TeamInvite;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class TeamInviteController extends Controller
 {
@@ -82,12 +88,13 @@ class TeamInviteController extends Controller
         return Inertia::render('Auth/Join', [
             'token' => $invite->token,
             'role' => $invite->role?->only(['name', 'slug']),
-            'organization' => \App\Models\Setting::getValue('organization_name', 'Prime Z'),
+            'organization' => Setting::getValue('organization_name', 'Prime Z'),
             'expires_at' => $invite->expires_at?->toIso8601String(),
+            'registered' => false,
         ]);
     }
 
-    public function register(Request $request, string $token): RedirectResponse
+    public function register(Request $request, string $token, NotificationService $notifications): Response|RedirectResponse
     {
         if (Auth::check()) {
             return redirect()->route('dashboard');
@@ -134,14 +141,74 @@ class TeamInviteController extends Controller
 
             $locked->increment('uses_count');
 
-            return $person;
+            return $person->load('roles:id,name,slug');
         });
 
         Auth::login($user);
         $request->session()->regenerate();
         $user->forceFill(['last_seen_at' => now()])->save();
 
-        return redirect()->route('dashboard')->with('success', 'Welcome to the team.');
+        $this->notifyRegistration($user, $notifications);
+
+        $organization = (string) Setting::getValue('organization_name', 'Prime Z');
+
+        $request->session()->flash('success', 'Registration successful. Welcome to '.$organization.'!');
+
+        return Inertia::render('Auth/Join', [
+            'token' => $invite->token,
+            'role' => $user->roles->first()?->only(['name', 'slug']),
+            'organization' => $organization,
+            'expires_at' => $invite->expires_at?->toIso8601String(),
+            'registered' => true,
+            'registeredName' => $user->name,
+            'dashboardUrl' => route('dashboard'),
+        ]);
+    }
+
+    private function notifyRegistration(User $user, NotificationService $notifications): void
+    {
+        $organization = (string) Setting::getValue('organization_name', config('app.name', 'Prime Z'));
+        $roleName = $user->roles->first()?->name;
+        $loginUrl = route('dashboard');
+        $teamUrl = url('/settings?section=users');
+
+        try {
+            Mail::to($user->email)->send(new WelcomeNewUserMail($user, $organization, $loginUrl));
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+
+        $admins = User::query()
+            ->where('is_active', true)
+            ->whereKeyNot($user->id)
+            ->whereHas('roles', fn ($query) => $query->where('slug', 'administrator'))
+            ->get();
+
+        foreach ($admins as $admin) {
+            try {
+                Mail::to($admin->email)->send(new AdminNewUserRegisteredMail(
+                    $user,
+                    $organization,
+                    $teamUrl,
+                    $roleName,
+                ));
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+
+            $notifications->send(
+                $admin,
+                'user_registered',
+                'New team member registered',
+                $user->name.' ('.$user->email.') joined'.($roleName ? ' as '.$roleName : '').'.',
+                'user-registered-'.$user->id,
+                [
+                    'user_id' => $user->id,
+                    'email' => $user->email,
+                    'role' => $roleName,
+                ],
+            );
+        }
     }
 
     private function findOpenInvite(string $token): TeamInvite

@@ -787,7 +787,8 @@ export default function PostingIndex({
                         <ul className="divide-y divide-zinc-100">
                             {posts.map((post) => {
                                 const isFocused = focus?.post_id === post.id;
-                                const canEditCaption = post.status === 'published' || post.status === 'scheduled';
+                                // Published posts are view-only; scheduled can still update caption before Facebook posts.
+                                const canEditCaption = post.status === 'scheduled';
                                 const canEditDraft = post.status === 'draft';
                                 const canDelete = post.status === 'draft' || post.status === 'failed';
                                 return (

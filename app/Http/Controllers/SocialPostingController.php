@@ -517,6 +517,11 @@ class SocialPostingController extends Controller
         abort_unless($post->account?->platform?->slug === 'facebook', 404);
         abort_unless($request->user()->canAccessBrand($post->account->brand_id), 403);
         abort_unless($request->user()->canAccessSocialAccount($post->account->id), 403);
+        abort_unless(
+            $post->status === 'scheduled',
+            422,
+            'Published posts are view-only. Only scheduled posts can have their caption updated.'
+        );
 
         $data = $request->validate([
             'caption' => ['required', 'string', 'max:5000'],

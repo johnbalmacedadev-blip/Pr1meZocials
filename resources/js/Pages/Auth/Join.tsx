@@ -1,5 +1,5 @@
-import { Head, Link, useForm } from '@inertiajs/react';
-import { FormEvent } from 'react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import { FormEvent, useEffect } from 'react';
 import { Button, Card, Field, Input } from '@/Components/ui';
 import GuestLayout from '@/Layouts/GuestLayout';
 
@@ -8,11 +8,17 @@ export default function Join({
     role,
     organization,
     expires_at,
+    registered = false,
+    registeredName = null,
+    dashboardUrl = '/dashboard',
 }: {
     token: string;
     role: { name: string; slug: string } | null;
     organization: string;
     expires_at: string | null;
+    registered?: boolean;
+    registeredName?: string | null;
+    dashboardUrl?: string;
 }) {
     const form = useForm({
         name: '',
@@ -22,9 +28,44 @@ export default function Join({
         password_confirmation: '',
     });
 
+    useEffect(() => {
+        if (!registered) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            router.visit(dashboardUrl);
+        }, 2500);
+
+        return () => window.clearTimeout(timer);
+    }, [registered, dashboardUrl]);
+
     function submit(event: FormEvent) {
         event.preventDefault();
         form.post(`/join/${token}`);
+    }
+
+    if (registered) {
+        return (
+            <GuestLayout>
+                <Head title="Registration successful" />
+                <Card className="p-6 text-center">
+                    <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                        <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </div>
+                    <h1 className="text-xl font-semibold text-zinc-900">Registration successful</h1>
+                    <p className="mt-2 text-sm text-zinc-600">
+                        Welcome{registeredName ? `, ${registeredName}` : ''}! Your {organization} account is ready.
+                    </p>
+                    <p className="mt-1 text-sm text-zinc-500">A welcome email is on the way. Redirecting you to the dashboard…</p>
+                    <Button type="button" className="mt-5 w-full" onClick={() => router.visit(dashboardUrl)}>
+                        Go to dashboard now
+                    </Button>
+                </Card>
+            </GuestLayout>
+        );
     }
 
     return (
