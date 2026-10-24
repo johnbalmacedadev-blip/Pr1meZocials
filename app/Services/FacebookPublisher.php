@@ -517,7 +517,9 @@ class FacebookPublisher
         }
 
         if (! filled($account->external_id) || ! filled($account->access_token)) {
-            throw new RuntimeException('This Facebook page is missing a Page ID or access token.');
+            throw new RuntimeException(
+                'This Facebook page is missing a Page ID or access token. Open Page settings, Connect with Meta, then click Refresh pages so tokens are loaded automatically.'
+            );
         }
     }
 

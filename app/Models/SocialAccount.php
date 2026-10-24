@@ -67,8 +67,10 @@ class SocialAccount extends Model
 
     public function isFacebookReady(): bool
     {
+        // Use the decrypted accessor — raw ciphertext can exist after an APP_KEY
+        // change even when the token is no longer usable.
         return $this->is_active
             && filled($this->external_id)
-            && SafeEncrypted::present($this->getRawOriginal('access_token'));
+            && filled($this->access_token);
     }
 }

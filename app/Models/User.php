@@ -55,7 +55,7 @@ class User extends Authenticatable
 
     public function hasFacebookConnection(): bool
     {
-        return SafeEncrypted::present($this->getRawOriginal('facebook_user_token'));
+        return filled($this->facebook_user_token);
     }
 
     public function roles(): BelongsToMany

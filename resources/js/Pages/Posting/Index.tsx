@@ -1,11 +1,12 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { Eye, Heart, ImagePlus, MessageCircle, Pencil, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import FacebookGlyph from '@/Components/FacebookGlyph';
 import { Button, EmptyState, Field, PageHeader, Select, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
-import { formatDate } from '@/lib/utils';
+import { formatDate, withBase } from '@/lib/utils';
+import type { SharedProps } from '@/types';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-m4v'];
@@ -111,11 +112,14 @@ export default function PostingIndex({
     focus?: { tab?: TabId | null; post_id?: number | null } | null;
     loadError?: string | null;
 }) {
+    const basePath = usePage<SharedProps>().props.basePath ?? '';
     const managedPages = useMemo(
         () => pages.filter((page) => page.is_active && page.is_ready && page.can_post !== false),
         [pages],
     );
     const hasAnyPages = pages.length > 0;
+    const pagesNeedingToken = useMemo(() => pages.filter((page) => !page.is_ready), [pages]);
+    const connectMetaUrl = withBase('/posting/facebook/redirect', basePath);
     const scheduleBounds = useMemo(() => {
         const min = new Date(Date.now() + 10 * 60 * 1000);
         const max = new Date(Date.now() + 75 * 24 * 60 * 60 * 1000);
@@ -363,13 +367,13 @@ export default function PostingIndex({
                                 </Button>
                             </>
                         )}
-                        {tab === 'pages' && !metaConnected && !hasAnyPages && (
+                        {tab === 'pages' && metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
                             <Button
                                 type="button"
                                 disabled={!metaConfigured}
-                                onClick={() => { window.location.href = '/posting/facebook/redirect'; }}
+                                onClick={() => { window.location.href = connectMetaUrl; }}
                             >
-                                Connect with Meta
+                                {metaConnected ? 'Reconnect Meta' : 'Connect with Meta'}
                             </Button>
                         )}
                     </div>
@@ -416,11 +420,13 @@ export default function PostingIndex({
                         {managedPages.length === 0 ? (
                             <div className="space-y-3">
                                 <p className="text-sm text-zinc-600">
-                                    {hasAnyPages
-                                        ? 'No active pages yet. Mark at least one page Active in Page settings.'
-                                        : metaConnected
-                                            ? 'No Pages loaded yet. Open Page settings and click Refresh pages.'
-                                            : 'Connect with Meta in Page settings to load the Pages you manage.'}
+                                    {pagesNeedingToken.length > 0
+                                        ? 'Your Facebook Pages are listed, but Page ID/access tokens are missing or expired. Open Page settings, Connect with Meta, then Refresh pages — those values fill in automatically from Meta (you never type them).'
+                                        : hasAnyPages
+                                            ? 'No active pages yet. Mark at least one Connected page Active in Page settings.'
+                                            : metaConnected
+                                                ? 'No Pages loaded yet. Open Page settings and click Refresh pages.'
+                                                : 'Connect with Meta in Page settings to load the Pages you manage. Page ID and access token are filled automatically.'}
                                 </p>
                                 <Button type="button" variant="secondary" onClick={() => setTab('pages')}>
                                     Open Page settings
@@ -795,20 +801,38 @@ export default function PostingIndex({
                     <div className="border-b border-zinc-100 px-4 py-3">
                         <h2 className="font-semibold">Page settings</h2>
                         <p className="text-sm text-zinc-600">
-                            Turn pages Active to show them in the Compose dropdown. Inactive pages stay listed here but are hidden from posting.
+                            Page ID and access token are filled automatically when you Connect with Meta and Refresh pages. Turn pages Active to show them in Compose.
                         </p>
                     </div>
 
-                    {!hasAnyPages && !metaConfigured && (
+                    {!metaConfigured && (
                         <p className="m-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                            Add <code className="rounded bg-amber-100 px-1">FACEBOOK_APP_ID</code> and <code className="rounded bg-amber-100 px-1">FACEBOOK_APP_SECRET</code> to <code className="rounded bg-amber-100 px-1">.env</code>, and set the OAuth redirect URI in Meta to <code className="rounded bg-amber-100 px-1">/posting/facebook/callback</code>.
+                            Add <code className="rounded bg-amber-100 px-1">FACEBOOK_APP_ID</code> and <code className="rounded bg-amber-100 px-1">FACEBOOK_APP_SECRET</code> to <code className="rounded bg-amber-100 px-1">.env</code>, and set the OAuth redirect URI in Meta to your live callback URL ending in <code className="rounded bg-amber-100 px-1">/posting/facebook/callback</code>.
                         </p>
                     )}
 
-                    {!hasAnyPages && !metaConnected && metaConfigured && (
-                        <p className="m-4 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
-                            Connect with Meta once to load every Facebook Page you manage.
-                        </p>
+                    {metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
+                        <div className="m-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+                            <p className="font-medium">
+                                {!metaConnected
+                                    ? 'Meta is not connected (or the saved login expired).'
+                                    : `${pagesNeedingToken.length} page${pagesNeedingToken.length === 1 ? '' : 's'} need a fresh Page ID / access token from Meta.`}
+                            </p>
+                            <p>
+                                You do not enter these by hand. Click <strong>Connect with Meta</strong>, approve access, then <strong>Refresh pages</strong> so every Page gets a new token automatically.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                <Button type="button" onClick={() => { window.location.href = connectMetaUrl; }}>
+                                    {!metaConnected ? 'Connect with Meta' : 'Reconnect Meta'}
+                                </Button>
+                                {metaConnected && (
+                                    <Button type="button" variant="secondary" disabled={refreshing || brands.length === 0} onClick={refreshPages}>
+                                        <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                                        {refreshing ? 'Refreshing…' : 'Refresh pages'}
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
                     )}
 
                     {hasAnyPages ? (
@@ -822,7 +846,7 @@ export default function PostingIndex({
                                         </p>
                                         <p className="text-xs text-zinc-500">
                                             {page.brand?.name ? `${page.brand.name} · ` : ''}
-                                            {page.is_ready ? 'Connected' : 'Missing Page token'}
+                                            {page.is_ready ? 'Connected (token ready)' : 'Missing Page ID / token — reconnect Meta'}
                                             {' · '}
                                             {page.is_active ? 'Active for posting' : 'Inactive'}
                                         </p>
