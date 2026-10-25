@@ -12,6 +12,9 @@ DirectoryIndex index.php
     # Someone hitting /public/... directly — let public/.htaccess handle it.
     RewriteRule ^public/ - [L]
 
+    # Never expose Laravel source trees (Creative Assets used to collide with /resources).
+    RewriteRule ^(app|bootstrap|config|database|resources|storage|tests|vendor)(/|$) - [F,L]
+
     # Real files/folders in the project root (this index.php, robots.txt, etc.).
     RewriteCond %{REQUEST_FILENAME} -f [OR]
     RewriteCond %{REQUEST_FILENAME} -d

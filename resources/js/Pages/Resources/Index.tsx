@@ -47,7 +47,7 @@ export default function ResourcesIndex({
 
     function save(event: FormEvent) {
         event.preventDefault();
-        form.post('/resources', { preserveScroll: true, onSuccess: () => form.reset('name', 'url') });
+        form.post('/creative-assets', { preserveScroll: true, onSuccess: () => form.reset('name', 'url') });
     }
 
     function saveEdit(event: FormEvent) {
@@ -55,7 +55,7 @@ export default function ResourcesIndex({
         if (!editing) {
             return;
         }
-        editForm.put(`/resources/${editing.id}`, {
+        editForm.put(`/creative-assets/${editing.id}`, {
             preserveScroll: true,
             onSuccess: () => setEditing(null),
         });
@@ -66,15 +66,15 @@ export default function ResourcesIndex({
             <Head title="Creative Assets" />
             <PageHeader title="Creative Assets" description="Save a Google Drive folder and browse its files here. Download stays in this app. View in Google is the only link that leaves." />
             <div className="mb-4 flex flex-wrap items-center gap-2">
-                <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); visitFilters('/resources', { q: String(data.get('q') ?? ''), view: filters.view }); }}>
+                <form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); visitFilters('/creative-assets', { q: String(data.get('q') ?? ''), view: filters.view }); }}>
                     <Input name="q" defaultValue={filters.q} placeholder="Search by title" aria-label="Search by title" className="h-10 max-w-sm" />
                     <Button type="submit" variant="secondary" className="h-10">Search</Button>
                 </form>
                 <div className="flex rounded-lg border border-zinc-200 bg-white p-1">
-                    <button type="button" aria-pressed={filters.view === 'cards'} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm ${filters.view === 'cards' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`} onClick={() => visitFilters('/resources', { q: filters.q, view: 'cards' })}>
+                    <button type="button" aria-pressed={filters.view === 'cards'} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm ${filters.view === 'cards' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`} onClick={() => visitFilters('/creative-assets', { q: filters.q, view: 'cards' })}>
                         <LayoutGrid className="h-4 w-4" /> Cards
                     </button>
-                    <button type="button" aria-pressed={filters.view === 'list'} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm ${filters.view === 'list' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`} onClick={() => visitFilters('/resources', { q: filters.q, view: 'list' })}>
+                    <button type="button" aria-pressed={filters.view === 'list'} className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm ${filters.view === 'list' ? 'bg-zinc-900 text-white' : 'text-zinc-600 hover:bg-zinc-50'}`} onClick={() => visitFilters('/creative-assets', { q: filters.q, view: 'list' })}>
                         <List className="h-4 w-4" /> List
                     </button>
                 </div>
@@ -185,7 +185,7 @@ function DriveBrowser({ item, onClose }: { item: ResourceCard | null; onClose: (
         setLoading(true);
         setError('');
 
-        fetch(`/resources/${item.id}/files${params}`, { headers: { Accept: 'application/json' } })
+        fetch(`/creative-assets/${item.id}/files${params}`, { headers: { Accept: 'application/json' } })
             .then(async (response) => {
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
@@ -221,7 +221,7 @@ function DriveBrowser({ item, onClose }: { item: ResourceCard | null; onClose: (
             return '#';
         }
 
-        return `/resources/${item.id}/files/${entry.id}/${action}?folder=${encodeURIComponent(folderId)}`;
+        return `/creative-assets/${item.id}/files/${entry.id}/${action}?folder=${encodeURIComponent(folderId)}`;
     }
 
     return (
@@ -311,7 +311,7 @@ function EditDelete({ item, onEdit }: { item: ResourceCard; onEdit: (item: Resou
                             message: `Delete “${item.name}”? This cannot be undone.`,
                             confirmLabel: 'Delete',
                         });
-                        if (ok) router.delete(`/resources/${item.id}`, { preserveScroll: true });
+                        if (ok) router.delete(`/creative-assets/${item.id}`, { preserveScroll: true });
                     }}
                 >
                     <Trash2 className="h-4 w-4" />

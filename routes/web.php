@@ -72,13 +72,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/assets/{asset}/preview', [AssetController::class, 'preview'])->name('assets.preview');
     Route::delete('/assets/{asset}', [AssetController::class, 'destroy'])->name('assets.destroy');
 
-    Route::get('/resources', [ResourceLinkController::class, 'index'])->name('resources.index');
-    Route::get('/resources/{resourceLink}/files', [ResourceLinkController::class, 'files'])->name('resources.files');
-    Route::get('/resources/{resourceLink}/files/{file}/preview', [ResourceLinkController::class, 'preview'])->where('file', '[A-Za-z0-9_-]+')->name('resources.files.preview');
-    Route::get('/resources/{resourceLink}/files/{file}/download', [ResourceLinkController::class, 'download'])->where('file', '[A-Za-z0-9_-]+')->name('resources.files.download');
-    Route::post('/resources', [ResourceLinkController::class, 'store'])->name('resources.store');
-    Route::put('/resources/{resourceLink}', [ResourceLinkController::class, 'update'])->name('resources.update');
-    Route::delete('/resources/{resourceLink}', [ResourceLinkController::class, 'destroy'])->name('resources.destroy');
+    // /creative-assets (not /resources) — Apache would otherwise serve the Laravel resources/ folder.
+    Route::get('/creative-assets', [ResourceLinkController::class, 'index'])->name('resources.index');
+    Route::get('/creative-assets/{resourceLink}/files', [ResourceLinkController::class, 'files'])->name('resources.files');
+    Route::get('/creative-assets/{resourceLink}/files/{file}/preview', [ResourceLinkController::class, 'preview'])->where('file', '[A-Za-z0-9_-]+')->name('resources.files.preview');
+    Route::get('/creative-assets/{resourceLink}/files/{file}/download', [ResourceLinkController::class, 'download'])->where('file', '[A-Za-z0-9_-]+')->name('resources.files.download');
+    Route::post('/creative-assets', [ResourceLinkController::class, 'store'])->name('resources.store');
+    Route::put('/creative-assets/{resourceLink}', [ResourceLinkController::class, 'update'])->name('resources.update');
+    Route::delete('/creative-assets/{resourceLink}', [ResourceLinkController::class, 'destroy'])->name('resources.destroy');
 
     Route::get('/inspiration', [InspirationController::class, 'index'])->name('inspiration.index');
     Route::post('/inspiration', [InspirationController::class, 'store'])->name('inspiration.store');

@@ -26,7 +26,7 @@ class ResourceLinkTest extends TestCase
         $user = $this->makeUser('social_media_manager', $brand);
         $url = 'https://drive.google.com/drive/folders/exampleFolderId';
 
-        $this->actingAs($user)->post('/resources', [
+        $this->actingAs($user)->post('/creative-assets', [
             'name' => 'Brand assets',
             'url' => $url,
         ])->assertRedirect()->assertSessionHas('success');
@@ -38,7 +38,7 @@ class ResourceLinkTest extends TestCase
             'url' => $url,
         ]);
 
-        $this->actingAs($user)->get('/resources')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->actingAs($user)->get('/creative-assets')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Resources/Index')
             ->where('items.data.0.name', 'Brand assets')
             ->where('items.data.0.url', $url)
@@ -49,7 +49,7 @@ class ResourceLinkTest extends TestCase
 
         $item = ResourceLink::query()->where('user_id', $user->id)->firstOrFail();
 
-        $this->actingAs($user)->put('/resources/'.$item->id, [
+        $this->actingAs($user)->put('/creative-assets/'.$item->id, [
             'name' => 'Campaign files',
             'url' => $url,
         ])->assertRedirect()->assertSessionHas('success');
@@ -65,7 +65,7 @@ class ResourceLinkTest extends TestCase
         $brand = $this->makeBrand('Northwind');
         $user = $this->makeUser('social_media_manager', $brand);
 
-        $this->actingAs($user)->post('/resources', [
+        $this->actingAs($user)->post('/creative-assets', [
             'name' => 'Not a folder',
             'url' => 'https://example.com/files',
         ])->assertSessionHasErrors('url');
@@ -87,7 +87,7 @@ class ResourceLinkTest extends TestCase
             'url' => 'https://drive.google.com/drive/folders/hiddenFolder',
         ]);
 
-        $this->actingAs($outsider)->get('/resources')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->actingAs($outsider)->get('/creative-assets')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('items.total', 0)
         );
     }
@@ -110,7 +110,7 @@ class ResourceLinkTest extends TestCase
             'url' => 'https://drive.google.com/drive/folders/campaignFiles',
         ]);
 
-        $this->actingAs($user)->get('/resources?q=Brand&view=list')->assertOk()->assertInertia(fn (Assert $page) => $page
+        $this->actingAs($user)->get('/creative-assets?q=Brand&view=list')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->where('filters.q', 'Brand')
             ->where('filters.view', 'list')
             ->where('items.total', 1)
@@ -210,30 +210,30 @@ class ResourceLinkTest extends TestCase
             return Http::response('missing', 404);
         });
 
-        $this->actingAs($outsider)->get("/resources/{$folder->id}/files")->assertForbidden();
+        $this->actingAs($outsider)->get("/creative-assets/{$folder->id}/files")->assertForbidden();
 
-        $this->actingAs($user)->get("/resources/{$folder->id}/files")->assertOk()
+        $this->actingAs($user)->get("/creative-assets/{$folder->id}/files")->assertOk()
             ->assertJsonPath('entries.0.kind', 'folder')
             ->assertJsonPath('entries.0.name', 'Assets')
             ->assertJsonPath('entries.1.name', 'photo.jpeg')
             ->assertJsonPath('entries.1.previewable', true);
 
-        $this->actingAs($user)->get("/resources/{$folder->id}/files?folder=notInRoot1")->assertNotFound();
+        $this->actingAs($user)->get("/creative-assets/{$folder->id}/files?folder=notInRoot1")->assertNotFound();
 
-        $this->actingAs($user)->get("/resources/{$folder->id}/files?folder=childFolder1")->assertOk()
+        $this->actingAs($user)->get("/creative-assets/{$folder->id}/files?folder=childFolder1")->assertOk()
             ->assertJsonPath('entries.0.name', 'inside.png');
 
-        $preview = $this->actingAs($user)->get("/resources/{$folder->id}/files/fileImage001/preview?folder=rootFolder01");
+        $preview = $this->actingAs($user)->get("/creative-assets/{$folder->id}/files/fileImage001/preview?folder=rootFolder01");
         $preview->assertOk();
         $this->assertSame('thumb-bytes', $preview->streamedContent());
         $preview->assertHeader('Content-Disposition', 'inline; filename="photo.jpeg"');
 
-        $download = $this->actingAs($user)->get("/resources/{$folder->id}/files/fileImage001/download?folder=rootFolder01");
+        $download = $this->actingAs($user)->get("/creative-assets/{$folder->id}/files/fileImage001/download?folder=rootFolder01");
         $download->assertOk();
         $this->assertSame('image-bytes', $download->streamedContent());
         $download->assertHeader('Content-Disposition', 'attachment; filename="photo.jpeg"');
 
-        $this->actingAs($user)->get("/resources/{$folder->id}/files/otherFile001/download?folder=rootFolder01")->assertNotFound();
+        $this->actingAs($user)->get("/creative-assets/{$folder->id}/files/otherFile001/download?folder=rootFolder01")->assertNotFound();
     }
 
     /**
