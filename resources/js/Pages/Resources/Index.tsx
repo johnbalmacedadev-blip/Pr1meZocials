@@ -1,10 +1,11 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { Download, File, Folder, LayoutGrid, List, Pencil, Trash2 } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Button, EmptyState, Field, Input, Modal, PageHeader, Pagination } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
-import { formatDate, visitFilters } from '@/lib/utils';
+import { formatDate, visitFilters, withBase } from '@/lib/utils';
+import type { SharedProps } from '@/types';
 
 interface ResourceCard {
     id: number;
@@ -159,6 +160,7 @@ function FolderActions({ item, onEdit, onBrowse }: { item: ResourceCard; onEdit:
 }
 
 function DriveBrowser({ item, onClose }: { item: ResourceCard | null; onClose: () => void }) {
+    const basePath = usePage<SharedProps>().props.basePath ?? '';
     const [path, setPath] = useState<{ id: string; name: string }[]>([]);
     const [folderId, setFolderId] = useState<string | null>(null);
     const [entries, setEntries] = useState<DriveEntry[]>([]);
@@ -185,11 +187,19 @@ function DriveBrowser({ item, onClose }: { item: ResourceCard | null; onClose: (
         setLoading(true);
         setError('');
 
-        fetch(`/creative-assets/${item.id}/files${params}`, { headers: { Accept: 'application/json' } })
+        fetch(withBase(`/creative-assets/${item.id}/files${params}`, basePath), {
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        })
             .then(async (response) => {
-                const data = await response.json().catch(() => ({}));
+                const data = await response.json().catch(() => ({} as Record<string, unknown>));
                 if (!response.ok) {
-                    throw new Error(typeof data.message === 'string' ? data.message : 'This folder could not be opened.');
+                    const message = typeof data.message === 'string'
+                        ? data.message
+                        : response.status === 404
+                            ? 'This folder link is invalid or could not be found.'
+                            : 'This Google Drive folder could not be opened. Share it so anyone with the link can view, then try again — or use View in Google.';
+                    throw new Error(message);
                 }
                 if (cancelled) {
                     return;
@@ -212,7 +222,7 @@ function DriveBrowser({ item, onClose }: { item: ResourceCard | null; onClose: (
         return () => {
             cancelled = true;
         };
-    }, [item, path]);
+    }, [item, path, basePath]);
 
     const googleUrl = !item ? '' : path.length === 0 ? item.url : `https://drive.google.com/drive/folders/${path[path.length - 1].id}`;
 
@@ -221,7 +231,7 @@ function DriveBrowser({ item, onClose }: { item: ResourceCard | null; onClose: (
             return '#';
         }
 
-        return `/creative-assets/${item.id}/files/${entry.id}/${action}?folder=${encodeURIComponent(folderId)}`;
+        return withBase(`/creative-assets/${item.id}/files/${entry.id}/${action}?folder=${encodeURIComponent(folderId)}`, basePath);
     }
 
     return (
