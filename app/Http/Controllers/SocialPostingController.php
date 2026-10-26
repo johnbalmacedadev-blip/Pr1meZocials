@@ -7,10 +7,13 @@ use App\Models\Platform;
 use App\Models\SocialAccount;
 use App\Models\SocialPost;
 use App\Models\User;
+use App\Models\Brand;
 use App\Services\FacebookPublisher;
 use App\Services\NotificationService;
+use App\Services\TikTokPublisher;
 use App\Support\FacebookCredentials;
 use App\Support\PostingScheduleSlots;
+use App\Support\TikTokCredentials;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -50,10 +53,29 @@ class SocialPostingController extends Controller
                     'profile_url' => $account->profile_url,
                 ]);
 
+            $tiktokAccounts = SocialAccount::query()
+                ->with('brand:id,name')
+                ->whereHas('platform', fn ($query) => $query->where('slug', 'tiktok'))
+                ->when(! $user->isAdmin(), fn ($query) => $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0]))
+                ->orderByDesc('is_active')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (SocialAccount $account) => [
+                    'id' => $account->id,
+                    'name' => $account->name,
+                    'handle' => $account->handle,
+                    'external_id' => $account->external_id,
+                    'is_active' => $account->is_active,
+                    'is_ready' => $account->isTikTokReady(),
+                    'can_post' => $user->isAdmin() || in_array((int) $account->id, $accessiblePageIds, true),
+                    'brand' => $account->brand?->only(['id', 'name']),
+                    'profile_url' => $account->profile_url,
+                ]);
+
             $postsQuery = SocialPost::query()
-                ->with(['account:id,name,external_id', 'user:id,name', 'contentItem:id,title,reference_number'])
+                ->with(['account:id,name,external_id', 'account.platform:id,slug,name', 'user:id,name', 'contentItem:id,title,reference_number'])
                 ->whereHas('account', function ($query) use ($user, $accessiblePageIds) {
-                    $query->whereHas('platform', fn ($platform) => $platform->where('slug', 'facebook'));
+                    $query->whereHas('platform', fn ($platform) => $platform->whereIn('slug', ['facebook', 'tiktok']));
                     if (! $user->isAdmin()) {
                         $query->whereIn('brand_id', $user->accessibleBrandIds() ?: [0])
                             ->whereIn('id', $accessiblePageIds ?: [0]);
@@ -95,8 +117,14 @@ class SocialPostingController extends Controller
                 $tab = $focusPostId ? 'history' : 'compose';
             }
 
+            $settingsPlatform = $request->string('platform')->toString();
+            if (! in_array($settingsPlatform, ['facebook', 'tiktok', 'instagram', 'youtube'], true)) {
+                $settingsPlatform = 'facebook';
+            }
+
             return Inertia::render('Posting/Index', [
                 'pages' => $pages,
+                'tiktokAccounts' => $tiktokAccounts,
                 'posts' => $posts->map(fn (SocialPost $post) => $this->presentPost($post))->values(),
                 'contentOptions' => $contentOptions,
                 'brands' => $user->accessibleBrands()->map->only(['id', 'name'])->values(),
@@ -105,6 +133,10 @@ class SocialPostingController extends Controller
                 'metaAppId' => FacebookCredentials::appId(),
                 'metaAppSecret' => FacebookCredentials::appSecret(),
                 'metaRedirectUri' => FacebookCredentials::redirectUri(),
+                'tiktokConfigured' => TikTokCredentials::isConfigured(),
+                'tiktokClientKey' => TikTokCredentials::clientKey(),
+                'tiktokClientSecret' => TikTokCredentials::clientSecret(),
+                'tiktokRedirectUri' => TikTokCredentials::redirectUri(),
                 'canManageMeta' => $this->canManageMeta($user),
                 'canManagePages' => $this->canManageMeta($user),
                 'workspacePagesReady' => $pages->contains(fn (array $page) => $page['is_ready'] === true),
@@ -112,6 +144,7 @@ class SocialPostingController extends Controller
                 'focus' => [
                     'tab' => $tab,
                     'post_id' => $focusPostId,
+                    'platform' => $settingsPlatform,
                 ],
             ]);
         } catch (\Throwable $exception) {
@@ -124,6 +157,7 @@ class SocialPostingController extends Controller
 
             return Inertia::render('Posting/Index', [
                 'pages' => [],
+                'tiktokAccounts' => [],
                 'posts' => [],
                 'contentOptions' => [],
                 'brands' => $user->accessibleBrands()->map->only(['id', 'name'])->values(),
@@ -132,11 +166,15 @@ class SocialPostingController extends Controller
                 'metaAppId' => FacebookCredentials::appId(),
                 'metaAppSecret' => FacebookCredentials::appSecret(),
                 'metaRedirectUri' => FacebookCredentials::redirectUri(),
+                'tiktokConfigured' => TikTokCredentials::isConfigured(),
+                'tiktokClientKey' => TikTokCredentials::clientKey(),
+                'tiktokClientSecret' => TikTokCredentials::clientSecret(),
+                'tiktokRedirectUri' => TikTokCredentials::redirectUri(),
                 'canManageMeta' => $this->canManageMeta($user),
                 'canManagePages' => $this->canManageMeta($user),
                 'workspacePagesReady' => false,
                 'composeDefaults' => $this->composeDefaults($request),
-                'focus' => ['tab' => 'compose', 'post_id' => null],
+                'focus' => ['tab' => 'compose', 'post_id' => null, 'platform' => 'facebook'],
                 'loadError' => $exception->getMessage(),
             ]);
         }
@@ -164,8 +202,138 @@ class SocialPostingController extends Controller
         }
 
         return redirect()
-            ->route('posting.index', ['tab' => 'pages'])
+            ->route('posting.index', ['tab' => 'pages', 'platform' => 'facebook'])
             ->with('success', 'Meta App ID and Secret saved. Click Connect with Meta next — these survive git pulls.');
+    }
+
+    public function saveTikTokCredentials(Request $request): RedirectResponse
+    {
+        abort_unless($this->canManageMeta($request->user()), 403);
+
+        $data = $request->validate([
+            'client_key' => ['required', 'string', 'max:128'],
+            'client_secret' => [
+                TikTokCredentials::clientSecret() !== '' ? 'nullable' : 'required',
+                'string',
+                'max:255',
+            ],
+        ]);
+
+        TikTokCredentials::save($data['client_key'], (string) ($data['client_secret'] ?? ''));
+
+        if (! TikTokCredentials::isConfigured()) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+                ->with('error', 'Client Secret is required. Paste it from TikTok for Developers → your app → Credentials.');
+        }
+
+        return redirect()
+            ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+            ->with('success', 'TikTok Client Key and Secret saved. Click Connect TikTok next — these survive git pulls.');
+    }
+
+    public function redirectToTikTok(Request $request, TikTokPublisher $publisher): RedirectResponse
+    {
+        abort_unless($this->canManageMeta($request->user()), 403);
+
+        if (! TikTokCredentials::isConfigured()) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+                ->with('error', 'Save your TikTok Client Key and Client Secret in TikTok settings first.');
+        }
+
+        $data = $request->validate([
+            'brand_id' => ['required', 'integer', 'exists:brands,id'],
+        ]);
+
+        $brand = Brand::query()->findOrFail((int) $data['brand_id']);
+        abort_unless($request->user()->canAccessBrand($brand->id), 403);
+
+        $state = TikTokCredentials::makeOAuthState((int) $request->user()->id, (int) $brand->id);
+        $request->session()->put('tiktok_oauth_state', $state);
+        Cache::put('tiktok_oauth_state:'.$state, [
+            'user_id' => (int) $request->user()->id,
+            'brand_id' => (int) $brand->id,
+        ], now()->addMinutes(30));
+
+        try {
+            return redirect()->away($publisher->oauthUrl($state));
+        } catch (\Throwable $exception) {
+            throw ValidationException::withMessages([
+                'tiktok' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    public function handleTikTokCallback(Request $request, TikTokPublisher $publisher): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('content.publish'), 403);
+
+        if ($request->filled('error')) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+                ->with('error', (string) $request->string('error_description')->toString() ?: 'TikTok authorization was cancelled.');
+        }
+
+        $state = (string) $request->string('state')->toString();
+        $code = (string) $request->string('code')->toString();
+        $parsed = $state !== '' ? TikTokCredentials::parseOAuthState($state, (int) $request->user()->id) : null;
+        $cached = $state !== '' ? Cache::pull('tiktok_oauth_state:'.$state) : null;
+        $sessionState = (string) $request->session()->pull('tiktok_oauth_state');
+
+        $brandId = (int) ($parsed['brand_id'] ?? ($cached['brand_id'] ?? 0));
+        $stateOk = $parsed !== null
+            || ($cached && (int) ($cached['user_id'] ?? 0) === (int) $request->user()->id && $brandId > 0)
+            || ($sessionState !== '' && hash_equals($sessionState, $state) && $brandId > 0);
+
+        if (! $stateOk || $code === '' || $brandId < 1) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+                ->with('error', 'TikTok login state was invalid or expired. Try Connect TikTok again.');
+        }
+
+        $brand = Brand::query()->find($brandId);
+        if (! $brand || ! $request->user()->canAccessBrand($brand->id)) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+                ->with('error', 'You cannot connect TikTok for that brand.');
+        }
+
+        try {
+            $token = $publisher->exchangeCode($code);
+            $account = $publisher->connectAccount($brand, $token);
+        } catch (\Throwable $exception) {
+            return redirect()
+                ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+                ->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+            ->with('success', $account->name.' connected for '.$brand->name.'. Videos can now cross-post to TikTok.');
+    }
+
+    public function destroyTikTokAccount(Request $request, SocialAccount $account): RedirectResponse
+    {
+        abort_unless($this->canManageMeta($request->user()), 403);
+        $account->load('platform');
+        abort_unless($account->platform?->slug === 'tiktok', 404);
+        abort_unless($request->user()->canAccessBrand($account->brand_id), 403);
+
+        $name = $account->name;
+        $account->update([
+            'access_token' => null,
+            'token_expires_at' => null,
+            'is_active' => false,
+            'meta' => array_merge(is_array($account->meta) ? $account->meta : [], [
+                'refresh_token' => null,
+                'disconnected_at' => now()->toIso8601String(),
+            ]),
+        ]);
+
+        return redirect()
+            ->route('posting.index', ['tab' => 'pages', 'platform' => 'tiktok'])
+            ->with('success', $name.' disconnected from TikTok posting.');
     }
 
     public function redirectToFacebook(Request $request, FacebookPublisher $publisher): RedirectResponse
@@ -301,7 +469,7 @@ class SocialPostingController extends Controller
         abort_unless($this->canManageMeta($request->user()), 403);
 
         $account->load('platform');
-        abort_unless($account->platform?->slug === 'facebook', 404);
+        abort_unless(in_array($account->platform?->slug, ['facebook', 'tiktok'], true), 404);
         abort_unless($request->user()->canAccessBrand($account->brand_id), 403);
 
         $data = $request->validate([
@@ -315,7 +483,7 @@ class SocialPostingController extends Controller
         return back()->with('success', $account->name.' is now '.$label.' for posting.');
     }
 
-    public function store(Request $request, FacebookPublisher $publisher, NotificationService $notifications): RedirectResponse
+    public function store(Request $request, FacebookPublisher $publisher, TikTokPublisher $tiktok, NotificationService $notifications): RedirectResponse
     {
         abort_unless($request->user()->hasPermission('content.publish'), 403);
 
@@ -356,6 +524,13 @@ class SocialPostingController extends Controller
                 Rule::when($request->input('media_type') === 'video', ['mimes:mp4,mov,m4v']),
             ],
             'return_to' => ['nullable', 'string', 'max:64', 'regex:/^\\/posting-schedule(\\?week=\\d{4}-\\d{2}-\\d{2})?$/'],
+            'also_post_tiktok' => ['nullable', 'boolean'],
+            'tiktok_social_account_id' => [
+                Rule::requiredIf($request->boolean('also_post_tiktok')),
+                'nullable',
+                'integer',
+                'exists:social_accounts,id',
+            ],
         ]);
 
         /** @var list<\Illuminate\Http\UploadedFile> $files */
@@ -474,6 +649,40 @@ class SocialPostingController extends Controller
             ? 'Scheduled on Facebook for '.$pageName.' at '.$published->scheduled_publish_at?->timezone(config('app.timezone'))->format('M j, Y g:i A').'. Facebook will publish it.'
             : 'Posted to '.$pageName.' on Facebook.';
 
+        $alsoTikTok = $request->boolean('also_post_tiktok') && $data['media_type'] === 'video';
+        if ($alsoTikTok) {
+            if ($data['publish_mode'] === 'schedule') {
+                $message .= ' TikTok cross-post skipped (schedule is Facebook-only — use Post now to also send to TikTok).';
+            } else {
+                $tiktokAccount = SocialAccount::query()->with('platform')->findOrFail((int) $data['tiktok_social_account_id']);
+                abort_unless($tiktokAccount->platform?->slug === 'tiktok', 422);
+                abort_unless($request->user()->canAccessBrand($tiktokAccount->brand_id), 403);
+                abort_unless($request->user()->canAccessSocialAccount($tiktokAccount->id), 403, 'You are not allowed to post to this TikTok account.');
+                abort_unless($tiktokAccount->isTikTokReady() && $tiktokAccount->is_active, 422, 'Choose a ready TikTok account first.');
+
+                $tiktokPost = SocialPost::query()->create([
+                    'social_account_id' => $tiktokAccount->id,
+                    'user_id' => $request->user()->id,
+                    'content_item_id' => $contentItemId,
+                    'caption' => $data['caption'],
+                    'media_type' => 'video',
+                    'media_path' => $first['path'],
+                    'media_name' => $mediaName,
+                    'media_files' => $mediaFiles,
+                    'status' => 'draft',
+                    'cross_post_of_id' => $published->id,
+                    'error_message' => null,
+                ]);
+
+                try {
+                    $tiktok->publish($tiktokPost);
+                    $message .= ' Also posted to TikTok ('.$tiktokAccount->name.').';
+                } catch (\Throwable $exception) {
+                    $message .= ' Facebook succeeded, but TikTok failed: '.$exception->getMessage();
+                }
+            }
+        }
+
         $notifications->send(
             $request->user(),
             $scheduled ? 'facebook_post_scheduled' : 'facebook_post_published',
@@ -547,7 +756,7 @@ class SocialPostingController extends Controller
     {
         abort_unless($request->user()->hasPermission('content.publish'), 403);
         $post->load('account.platform');
-        abort_unless($post->account?->platform?->slug === 'facebook', 404);
+        abort_unless(in_array($post->account?->platform?->slug, ['facebook', 'tiktok'], true), 404);
         abort_unless($request->user()->canAccessBrand($post->account->brand_id), 403);
         abort_unless($request->user()->canAccessSocialAccount($post->account->id), 403);
         abort_unless(
@@ -600,6 +809,8 @@ class SocialPostingController extends Controller
 
     private function presentPost(SocialPost $post): array
     {
+        $platformSlug = $post->account?->platform?->slug ?? 'facebook';
+
         return [
             'id' => $post->id,
             'caption' => $post->caption,
@@ -609,6 +820,9 @@ class SocialPostingController extends Controller
             'status' => $post->status,
             'error_message' => $post->error_message,
             'facebook_post_id' => $post->facebook_post_id,
+            'tiktok_publish_id' => $post->tiktok_publish_id,
+            'cross_post_of_id' => $post->cross_post_of_id,
+            'platform' => $platformSlug,
             'permalink_url' => $post->permalink_url,
             'likes_count' => $post->likes_count,
             'comments_count' => $post->comments_count,

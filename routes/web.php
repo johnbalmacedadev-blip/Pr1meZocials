@@ -124,6 +124,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/posting/facebook/callback', [SocialPostingController::class, 'handleFacebookCallback'])->name('posting.facebook.callback');
     Route::post('/posting/facebook/refresh', [SocialPostingController::class, 'refreshPages'])->name('posting.facebook.refresh');
     Route::delete('/posting/facebook', [SocialPostingController::class, 'destroyMeta'])->name('posting.facebook.destroy');
+    Route::post('/posting/tiktok/credentials', [SocialPostingController::class, 'saveTikTokCredentials'])->name('posting.tiktok.credentials');
+    Route::get('/posting/tiktok/redirect', [SocialPostingController::class, 'redirectToTikTok'])->name('posting.tiktok.redirect');
+    Route::get('/posting/tiktok/callback', [SocialPostingController::class, 'handleTikTokCallback'])->name('posting.tiktok.callback');
+    Route::delete('/posting/tiktok/{account}', [SocialPostingController::class, 'destroyTikTokAccount'])->name('posting.tiktok.destroy');
     Route::patch('/posting/pages/{account}', [SocialPostingController::class, 'updatePage'])->name('posting.pages.update');
     Route::post('/posting/{post}/sync', [SocialPostingController::class, 'sync'])->name('posting.sync');
     Route::put('/posting/{post}', [SocialPostingController::class, 'update'])->name('posting.update');

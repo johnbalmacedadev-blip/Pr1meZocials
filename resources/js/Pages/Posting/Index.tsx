@@ -26,9 +26,21 @@ function detectMediaType(file: File): 'image' | 'video' | null {
 }
 
 type TabId = 'compose' | 'history' | 'pages';
+type SettingsPlatformId = 'facebook' | 'tiktok' | 'instagram' | 'youtube';
 
 interface BrandOption { id: number; name: string }
 interface PageOption {
+    id: number;
+    name: string;
+    handle: string | null;
+    external_id: string | null;
+    is_active: boolean;
+    is_ready: boolean;
+    can_post: boolean;
+    brand: { id: number; name: string } | null;
+    profile_url: string | null;
+}
+interface TikTokAccountOption {
     id: number;
     name: string;
     handle: string | null;
@@ -54,6 +66,9 @@ interface PostRow {
     status: string;
     error_message: string | null;
     facebook_post_id: string | null;
+    tiktok_publish_id?: string | null;
+    cross_post_of_id?: number | null;
+    platform?: 'facebook' | 'tiktok' | string;
     permalink_url: string | null;
     likes_count: number;
     comments_count: number;
@@ -80,6 +95,13 @@ const TABS: { id: TabId; label: string }[] = [
     { id: 'pages', label: 'Page settings' },
 ];
 
+const SETTINGS_PLATFORMS: { id: SettingsPlatformId; label: string }[] = [
+    { id: 'facebook', label: 'Facebook' },
+    { id: 'tiktok', label: 'TikTok' },
+    { id: 'instagram', label: 'Instagram' },
+    { id: 'youtube', label: 'YouTube' },
+];
+
 interface ComposeDefaults {
     publish_mode: 'now' | 'schedule';
     scheduled_publish_at: string | null;
@@ -93,6 +115,7 @@ interface ComposeDefaults {
 
 export default function PostingIndex({
     pages,
+    tiktokAccounts = [],
     posts,
     contentOptions = [],
     brands,
@@ -101,6 +124,10 @@ export default function PostingIndex({
     metaAppId = '',
     metaAppSecret = '',
     metaRedirectUri = '',
+    tiktokConfigured = false,
+    tiktokClientKey = '',
+    tiktokClientSecret = '',
+    tiktokRedirectUri = '',
     canManageMeta = false,
     canManagePages = false,
     workspacePagesReady = false,
@@ -109,6 +136,7 @@ export default function PostingIndex({
     loadError = null,
 }: {
     pages: PageOption[];
+    tiktokAccounts?: TikTokAccountOption[];
     posts: PostRow[];
     contentOptions?: ContentOption[];
     brands: BrandOption[];
@@ -117,11 +145,15 @@ export default function PostingIndex({
     metaAppId?: string;
     metaAppSecret?: string;
     metaRedirectUri?: string;
+    tiktokConfigured?: boolean;
+    tiktokClientKey?: string;
+    tiktokClientSecret?: string;
+    tiktokRedirectUri?: string;
     canManageMeta?: boolean;
     canManagePages?: boolean;
     workspacePagesReady?: boolean;
     composeDefaults?: ComposeDefaults | null;
-    focus?: { tab?: TabId | null; post_id?: number | null } | null;
+    focus?: { tab?: TabId | null; post_id?: number | null; platform?: SettingsPlatformId | null } | null;
     loadError?: string | null;
 }) {
     const basePath = usePage<SharedProps>().props.basePath ?? '';
@@ -137,6 +169,16 @@ export default function PostingIndex({
     );
     const hasAnyPages = pages.length > 0;
     const pagesNeedingToken = useMemo(() => pages.filter((page) => !page.is_ready), [pages]);
+    const managedTikTokAccounts = useMemo(
+        () => tiktokAccounts.filter((account) => {
+            if (! account.is_ready || account.can_post === false) {
+                return false;
+            }
+            return canManagePages ? account.is_active : true;
+        }),
+        [tiktokAccounts, canManagePages],
+    );
+    const hasAnyTikTok = tiktokAccounts.length > 0;
     const connectMetaUrl = withBase('/posting/facebook/redirect', basePath);
     const scheduleBounds = useMemo(() => {
         const min = new Date(Date.now() + 10 * 60 * 1000);
@@ -154,6 +196,8 @@ export default function PostingIndex({
         publish_mode: (composeDefaults?.publish_mode ?? 'now') as 'now' | 'schedule',
         scheduled_publish_at: composeDefaults?.scheduled_publish_at ?? '',
         return_to: composeDefaults?.return_to ?? '',
+        also_post_tiktok: false,
+        tiktok_social_account_id: managedTikTokAccounts[0] ? String(managedTikTokAccounts[0].id) : '',
     });
     const editingDraftId = postForm.data.draft_id ? Number(postForm.data.draft_id) : null;
     const editingDraft = editingDraftId ? posts.find((post) => post.id === editingDraftId) ?? null : null;
@@ -163,6 +207,13 @@ export default function PostingIndex({
         }
         return focus?.post_id ? 'history' : 'compose';
     });
+    const [settingsPlatform, setSettingsPlatform] = useState<SettingsPlatformId>(() => {
+        if (focus?.platform && SETTINGS_PLATFORMS.some((item) => item.id === focus.platform)) {
+            return focus.platform;
+        }
+        return 'facebook';
+    });
+    const [tiktokBrandId, setTiktokBrandId] = useState(() => brands[0] ? String(brands[0].id) : '');
     const [previewUrls, setPreviewUrls] = useState<string[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [togglingPageId, setTogglingPageId] = useState<number | null>(null);
@@ -178,10 +229,16 @@ export default function PostingIndex({
         if (focus?.tab === 'history' || focus?.post_id) {
             setTab('history');
         }
+        if (focus?.tab === 'pages') {
+            setTab('pages');
+        }
         if (focus?.post_id) {
             setEditingPostId(focus.post_id);
         }
-    }, [focus?.tab, focus?.post_id]);
+        if (focus?.platform && SETTINGS_PLATFORMS.some((item) => item.id === focus.platform)) {
+            setSettingsPlatform(focus.platform);
+        }
+    }, [focus?.tab, focus?.post_id, focus?.platform]);
 
     useEffect(() => {
         if (!focus?.post_id || tab !== 'history') {
@@ -190,11 +247,18 @@ export default function PostingIndex({
         focusedPostRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, [focus?.post_id, tab, posts]);
 
+    useEffect(() => {
+        if (!brands.some((brand) => String(brand.id) === tiktokBrandId)) {
+            setTiktokBrandId(brands[0] ? String(brands[0].id) : '');
+        }
+    }, [brands, tiktokBrandId]);
+
     const selectedPage = managedPages.find((page) => String(page.id) === postForm.data.social_account_id) ?? null;
     const mediaFiles = postForm.data.media;
     const hasMedia = mediaFiles.length > 0;
     const hasReusableDraftMedia = Boolean(editingDraft && (editingDraft.media_count ?? 0) > 0 && !hasMedia);
     const canSubmitMedia = hasMedia || hasReusableDraftMedia;
+    const showTikTokOption = postForm.data.media_type === 'video' && (hasMedia || hasReusableDraftMedia);
 
     useEffect(() => {
         const stillManaged = managedPages.some((page) => String(page.id) === postForm.data.social_account_id);
@@ -203,6 +267,21 @@ export default function PostingIndex({
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [managedPages]);
+
+    useEffect(() => {
+        const stillManaged = managedTikTokAccounts.some((account) => String(account.id) === postForm.data.tiktok_social_account_id);
+        if (!stillManaged) {
+            postForm.setData('tiktok_social_account_id', managedTikTokAccounts[0] ? String(managedTikTokAccounts[0].id) : '');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [managedTikTokAccounts]);
+
+    useEffect(() => {
+        if (postForm.data.media_type !== 'video' && postForm.data.also_post_tiktok) {
+            postForm.setData('also_post_tiktok', false);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [postForm.data.media_type]);
 
     useEffect(() => {
         const urls = mediaFiles.map((file) => URL.createObjectURL(file));
@@ -231,6 +310,8 @@ export default function PostingIndex({
                     publish_mode: 'now',
                     scheduled_publish_at: '',
                     return_to: '',
+                    also_post_tiktok: false,
+                    tiktok_social_account_id: managedTikTokAccounts[0] ? String(managedTikTokAccounts[0].id) : '',
                 });
                 setTab('history');
             },
@@ -252,6 +333,8 @@ export default function PostingIndex({
                 ? toLocalInputValue(new Date(post.scheduled_publish_at))
                 : '',
             return_to: '',
+            also_post_tiktok: false,
+            tiktok_social_account_id: managedTikTokAccounts[0] ? String(managedTikTokAccounts[0].id) : '',
         });
         setEditingPostId(null);
         setTab('compose');
@@ -268,8 +351,18 @@ export default function PostingIndex({
             publish_mode: 'now',
             scheduled_publish_at: '',
             return_to: '',
+            also_post_tiktok: false,
+            tiktok_social_account_id: managedTikTokAccounts[0] ? String(managedTikTokAccounts[0].id) : '',
         });
         postForm.clearErrors();
+    }
+
+    function connectTikTok() {
+        if (!tiktokBrandId) {
+            return;
+        }
+        const params = new URLSearchParams({ brand_id: tiktokBrandId });
+        window.location.href = withBase(`/posting/tiktok/redirect?${params.toString()}`, basePath);
     }
 
     async function deleteHistoryPost(post: PostRow) {
@@ -432,10 +525,10 @@ export default function PostingIndex({
             <Head title="Posting" />
             <PageHeader
                 title="Posting"
-                description="Compose Facebook posts, review analytics, and choose which Pages appear in the dropdown."
+                description="Compose posts for Facebook, optionally cross-post videos to TikTok, and manage platform connections."
                 actions={canManageMeta ? (
                     <div className="flex flex-wrap gap-2">
-                        {tab === 'pages' && metaConnected && (
+                        {tab === 'pages' && settingsPlatform === 'facebook' && metaConnected && (
                             <>
                                 <Button type="button" variant="secondary" disabled={refreshing || brands.length === 0} onClick={refreshPages}>
                                     <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -450,13 +543,18 @@ export default function PostingIndex({
                                 </Button>
                             </>
                         )}
-                        {tab === 'pages' && metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
+                        {tab === 'pages' && settingsPlatform === 'facebook' && metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
                             <Button
                                 type="button"
                                 disabled={!metaConfigured}
                                 onClick={() => { window.location.href = connectMetaUrl; }}
                             >
                                 {metaConnected ? 'Reconnect Meta' : 'Connect with Meta'}
+                            </Button>
+                        )}
+                        {tab === 'pages' && settingsPlatform === 'tiktok' && tiktokConfigured && brands.length > 0 && (
+                            <Button type="button" onClick={connectTikTok}>
+                                {hasAnyTikTok ? 'Connect another TikTok' : 'Connect TikTok'}
                             </Button>
                         )}
                     </div>
@@ -632,12 +730,65 @@ export default function PostingIndex({
                                         {editingDraft?.media_name ? ` (${editingDraft.media_name})` : ''}
                                     </p>
                                 )}
+                                {showTikTokOption && (
+                                    <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3">
+                                        <label className="flex items-start gap-2 text-sm text-zinc-800">
+                                            <input
+                                                type="checkbox"
+                                                className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-600"
+                                                checked={postForm.data.also_post_tiktok}
+                                                disabled={managedTikTokAccounts.length === 0 || postForm.data.publish_mode === 'schedule'}
+                                                onChange={(event) => postForm.setData('also_post_tiktok', event.target.checked)}
+                                            />
+                                            <span>
+                                                <span className="font-medium">Also post this video to TikTok</span>
+                                                <span className="mt-0.5 block text-xs text-zinc-600">
+                                                    {managedTikTokAccounts.length === 0
+                                                        ? 'Connect a TikTok account in Page settings → TikTok first.'
+                                                        : postForm.data.publish_mode === 'schedule'
+                                                            ? 'Available when publishing now — Facebook schedule cannot cross-post to TikTok yet.'
+                                                            : 'Posts to Facebook and your selected TikTok account in one go.'}
+                                                </span>
+                                            </span>
+                                        </label>
+                                        {postForm.data.also_post_tiktok && managedTikTokAccounts.length > 0 && (
+                                            <Field label="TikTok account" error={postForm.errors.tiktok_social_account_id}>
+                                                <Select
+                                                    value={postForm.data.tiktok_social_account_id}
+                                                    onChange={(event) => postForm.setData('tiktok_social_account_id', event.target.value)}
+                                                    required
+                                                >
+                                                    {managedTikTokAccounts.map((account) => (
+                                                        <option key={account.id} value={account.id}>
+                                                            {account.name}{account.brand?.name ? ` · ${account.brand.name}` : ''}
+                                                        </option>
+                                                    ))}
+                                                </Select>
+                                            </Field>
+                                        )}
+                                        {postForm.errors.also_post_tiktok && (
+                                            <p className="text-sm text-rose-700">{postForm.errors.also_post_tiktok}</p>
+                                        )}
+                                    </div>
+                                )}
                                 <Button type="submit" disabled={postForm.processing || !canSubmitMedia} className="w-full">
                                     {postForm.processing
-                                        ? (postForm.data.publish_mode === 'schedule' ? 'Scheduling on Facebook…' : 'Posting to Facebook…')
+                                        ? (postForm.data.publish_mode === 'schedule'
+                                            ? 'Scheduling on Facebook…'
+                                            : postForm.data.also_post_tiktok
+                                                ? 'Posting to Facebook & TikTok…'
+                                                : 'Posting to Facebook…')
                                         : editingDraft
-                                            ? (postForm.data.publish_mode === 'schedule' ? 'Schedule draft on Facebook' : 'Post draft now')
-                                            : (postForm.data.publish_mode === 'schedule' ? 'Schedule on Facebook' : 'Post now')}
+                                            ? (postForm.data.publish_mode === 'schedule'
+                                                ? 'Schedule draft on Facebook'
+                                                : postForm.data.also_post_tiktok
+                                                    ? 'Post draft to Facebook & TikTok'
+                                                    : 'Post draft now')
+                                            : (postForm.data.publish_mode === 'schedule'
+                                                ? 'Schedule on Facebook'
+                                                : postForm.data.also_post_tiktok
+                                                    ? 'Post to Facebook & TikTok'
+                                                    : 'Post now')}
                                 </Button>
                             </>
                         )}
@@ -807,8 +958,8 @@ export default function PostingIndex({
                             {posts.map((post) => {
                                 const isFocused = focus?.post_id === post.id;
                                 // Published posts are view-only; scheduled can still update caption before Facebook posts.
-                                const canEditCaption = post.status === 'scheduled';
-                                const canEditDraft = post.status === 'draft';
+                                const canEditCaption = post.status === 'scheduled' && post.platform !== 'tiktok';
+                                const canEditDraft = post.status === 'draft' && post.platform !== 'tiktok';
                                 const canDelete = post.status === 'draft' || post.status === 'failed';
                                 return (
                                     <li
@@ -822,7 +973,7 @@ export default function PostingIndex({
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <StatusBadge status={post.status} />
                                                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                                                        {post.page?.name} · {(post.media_count ?? 1) > 1 ? `${post.media_count} images` : post.media_type}
+                                                        {(post.platform === 'tiktok' ? 'TikTok' : 'Facebook')} · {post.page?.name} · {(post.media_count ?? 1) > 1 ? `${post.media_count} images` : post.media_type}
                                                         {post.published_at ? ` · ${formatDate(post.published_at)}` : ''}
                                                         {post.scheduled_publish_at ? ` · schedules ${formatDate(post.scheduled_publish_at)}` : ''}
                                                     </p>
@@ -874,14 +1025,18 @@ export default function PostingIndex({
                                                         href={post.permalink_url}
                                                         target="_blank"
                                                         rel="noreferrer"
-                                                        aria-label="Open on Facebook"
-                                                        title="Open on Facebook"
-                                                        className="rounded-md p-1.5 text-[#1877F2] hover:bg-sky-50"
+                                                        aria-label={post.platform === 'tiktok' ? 'Open on TikTok' : 'Open on Facebook'}
+                                                        title={post.platform === 'tiktok' ? 'Open on TikTok' : 'Open on Facebook'}
+                                                        className={`rounded-md p-1.5 ${post.platform === 'tiktok' ? 'text-zinc-900 hover:bg-zinc-100' : 'text-[#1877F2] hover:bg-sky-50'}`}
                                                     >
-                                                        <FacebookGlyph className="h-4 w-4" />
+                                                        {post.platform === 'tiktok' ? (
+                                                            <span className="text-xs font-bold">TT</span>
+                                                        ) : (
+                                                            <FacebookGlyph className="h-4 w-4" />
+                                                        )}
                                                     </a>
                                                 )}
-                                                {post.status === 'published' && (
+                                                {post.status === 'published' && post.platform !== 'tiktok' && (
                                                     <Button
                                                         type="button"
                                                         size="sm"
@@ -927,95 +1082,239 @@ export default function PostingIndex({
                     <div className="border-b border-zinc-100 px-4 py-3">
                         <h2 className="font-semibold">Page settings</h2>
                         <p className="text-sm text-zinc-600">
-                            {canManageMeta
-                                ? 'Page ID and access token are filled automatically when you Connect with Meta and Refresh pages. Turn pages Active to show them in Compose.'
-                                : 'These are the shared Facebook pages for your brands. An admin or manager connects Meta once — you can post without linking your own Facebook account.'}
+                            Connect each platform once for the workspace. TikTok is ready for video cross-posting; Instagram and YouTube come next.
                         </p>
+                        <div className="mt-3 flex gap-2 overflow-x-auto">
+                            {SETTINGS_PLATFORMS.map((item) => (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    className={`rounded-full px-3 py-1 text-sm ${settingsPlatform === item.id ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700'}`}
+                                    onClick={() => setSettingsPlatform(item.id)}
+                                >
+                                    {item.label}
+                                    {item.id === 'facebook' && pages.length > 0 ? ` (${pages.filter((p) => p.is_active).length})` : ''}
+                                    {item.id === 'tiktok' && tiktokAccounts.length > 0 ? ` (${tiktokAccounts.filter((a) => a.is_active).length})` : ''}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    {canManageMeta && (
-                        <MetaCredentialsPanel
-                            configured={metaConfigured}
-                            appId={metaAppId}
-                            appSecret={metaAppSecret}
-                            redirectUri={metaRedirectUri}
-                        />
-                    )}
-
-                    {canManageMeta && metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
-                        <div className="m-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
-                            <p className="font-medium">
-                                {!metaConnected
-                                    ? 'Meta is not connected (or the saved login expired).'
-                                    : `${pagesNeedingToken.length} page${pagesNeedingToken.length === 1 ? '' : 's'} need a fresh Page ID / access token from Meta.`}
-                            </p>
-                            <p>
-                                You do not enter Page ID or tokens by hand. Click <strong>Connect with Meta</strong>, approve access — pages and tokens load automatically.
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                                <Button type="button" onClick={() => { window.location.href = connectMetaUrl; }}>
-                                    {!metaConnected ? 'Connect with Meta' : 'Reconnect Meta'}
-                                </Button>
-                                {metaConnected && (
-                                    <Button type="button" variant="secondary" disabled={refreshing || brands.length === 0} onClick={refreshPages}>
-                                        <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                                        {refreshing ? 'Refreshing…' : 'Refresh pages'}
-                                    </Button>
-                                )}
+                    {settingsPlatform === 'facebook' && (
+                        <>
+                            <div className="border-b border-zinc-100 px-4 py-3">
+                                <p className="text-sm text-zinc-600">
+                                    {canManageMeta
+                                        ? 'Page ID and access token are filled automatically when you Connect with Meta and Refresh pages. Turn pages Active to show them in Compose.'
+                                        : 'These are the shared Facebook pages for your brands. An admin or manager connects Meta once — you can post without linking your own Facebook account.'}
+                                </p>
                             </div>
-                        </div>
+
+                            {canManageMeta && (
+                                <MetaCredentialsPanel
+                                    configured={metaConfigured}
+                                    appId={metaAppId}
+                                    appSecret={metaAppSecret}
+                                    redirectUri={metaRedirectUri}
+                                />
+                            )}
+
+                            {canManageMeta && metaConfigured && (!metaConnected || pagesNeedingToken.length > 0) && (
+                                <div className="m-4 space-y-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+                                    <p className="font-medium">
+                                        {!metaConnected
+                                            ? 'Meta is not connected (or the saved login expired).'
+                                            : `${pagesNeedingToken.length} page${pagesNeedingToken.length === 1 ? '' : 's'} need a fresh Page ID / access token from Meta.`}
+                                    </p>
+                                    <p>
+                                        You do not enter Page ID or tokens by hand. Click <strong>Connect with Meta</strong>, approve access — pages and tokens load automatically.
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button type="button" onClick={() => { window.location.href = connectMetaUrl; }}>
+                                            {!metaConnected ? 'Connect with Meta' : 'Reconnect Meta'}
+                                        </Button>
+                                        {metaConnected && (
+                                            <Button type="button" variant="secondary" disabled={refreshing || brands.length === 0} onClick={refreshPages}>
+                                                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                                                {refreshing ? 'Refreshing…' : 'Refresh pages'}
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {!canManageMeta && !hasAnyPages && (
+                                <div className="p-4">
+                                    <EmptyState
+                                        title="Waiting on shared pages"
+                                        body="Ask an admin or manager to connect Meta and activate Facebook pages for your brand. You can post as soon as those pages are ready."
+                                    />
+                                </div>
+                            )}
+
+                            {hasAnyPages ? (
+                                <ul className="divide-y divide-zinc-100">
+                                    {pages.map((page) => (
+                                        <li key={page.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                                            <div className="min-w-0">
+                                                <p className="font-medium text-zinc-900">
+                                                    {page.name}
+                                                    {page.handle ? <span className="font-normal text-zinc-500"> @{page.handle}</span> : null}
+                                                </p>
+                                                <p className="text-xs text-zinc-500">
+                                                    {page.brand?.name ? `${page.brand.name} · ` : ''}
+                                                    {page.is_ready ? 'Connected (token ready)' : 'Missing Page ID / token — reconnect Meta'}
+                                                    {' · '}
+                                                    {page.is_active ? 'Active for posting' : 'Inactive'}
+                                                    {page.can_post === false ? ' · View only' : ''}
+                                                </p>
+                                            </div>
+                                            {canManagePages ? (
+                                                <label className="flex items-center gap-2 text-sm text-zinc-700">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-600"
+                                                        checked={page.is_active}
+                                                        disabled={!page.is_ready || togglingPageId === page.id}
+                                                        onChange={(event) => togglePage(page, event.target.checked)}
+                                                    />
+                                                    {togglingPageId === page.id ? 'Saving…' : page.is_active ? 'Active' : 'Inactive'}
+                                                </label>
+                                            ) : (
+                                                <span className={`text-xs font-medium ${page.is_active && page.is_ready ? 'text-emerald-700' : 'text-zinc-500'}`}>
+                                                    {page.is_active && page.is_ready ? 'Ready to post' : page.is_active ? 'Needs token' : 'Inactive'}
+                                                </span>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : canManageMeta && metaConnected ? (
+                                <div className="p-4">
+                                    <EmptyState title="No pages loaded" body="Click Refresh pages to pull every Facebook Page you manage from Meta." />
+                                </div>
+                            ) : null}
+                        </>
                     )}
 
-                    {!canManageMeta && !hasAnyPages && (
+                    {settingsPlatform === 'tiktok' && (
+                        <>
+                            <div className="border-b border-zinc-100 px-4 py-3">
+                                <p className="text-sm text-zinc-600">
+                                    {canManageMeta
+                                        ? 'Create an app on TikTok for Developers with Login Kit + Content Posting API (Direct Post / video.publish). Save credentials below, then connect the brand TikTok account. Unaudited apps can only post as private until TikTok audits your app.'
+                                        : 'Shared TikTok accounts for your brands. An admin connects TikTok once — then you can cross-post videos from Compose.'}
+                                </p>
+                            </div>
+
+                            {canManageMeta && (
+                                <TikTokCredentialsPanel
+                                    configured={tiktokConfigured}
+                                    clientKey={tiktokClientKey}
+                                    clientSecret={tiktokClientSecret}
+                                    redirectUri={tiktokRedirectUri}
+                                />
+                            )}
+
+                            {canManageMeta && tiktokConfigured && (
+                                <div className="m-4 space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 text-sm text-zinc-800">
+                                    <p className="font-medium">Connect a TikTok account</p>
+                                    <p className="text-xs text-zinc-600">
+                                        Pick the brand this account belongs to, then authorize TikTok. After connect, videos in Compose can use “Also post to TikTok”.
+                                    </p>
+                                    <div className="flex flex-wrap items-end gap-2">
+                                        <div className="min-w-[12rem] flex-1">
+                                            <Field label="Brand">
+                                                <Select
+                                                    value={tiktokBrandId}
+                                                    onChange={(event) => setTiktokBrandId(event.target.value)}
+                                                    required
+                                                >
+                                                    {brands.map((brand) => (
+                                                        <option key={brand.id} value={brand.id}>{brand.name}</option>
+                                                    ))}
+                                                </Select>
+                                            </Field>
+                                        </div>
+                                        <Button type="button" disabled={!tiktokBrandId || brands.length === 0} onClick={connectTikTok}>
+                                            {hasAnyTikTok ? 'Connect another TikTok' : 'Connect TikTok'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {!canManageMeta && !hasAnyTikTok && (
+                                <div className="p-4">
+                                    <EmptyState
+                                        title="Waiting on TikTok"
+                                        body="Ask an admin or manager to connect a TikTok account for your brand. Then you can cross-post videos from Compose."
+                                    />
+                                </div>
+                            )}
+
+                            {hasAnyTikTok ? (
+                                <ul className="divide-y divide-zinc-100">
+                                    {tiktokAccounts.map((account) => (
+                                        <li key={account.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                                            <div className="min-w-0">
+                                                <p className="font-medium text-zinc-900">{account.name}</p>
+                                                <p className="text-xs text-zinc-500">
+                                                    {account.brand?.name ? `${account.brand.name} · ` : ''}
+                                                    {account.is_ready ? 'Connected (token ready)' : 'Disconnected — reconnect TikTok'}
+                                                    {' · '}
+                                                    {account.is_active ? 'Active for posting' : 'Inactive'}
+                                                    {account.can_post === false ? ' · View only' : ''}
+                                                </p>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-3">
+                                                {canManagePages ? (
+                                                    <label className="flex items-center gap-2 text-sm text-zinc-700">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-600"
+                                                            checked={account.is_active}
+                                                            disabled={!account.is_ready || togglingPageId === account.id}
+                                                            onChange={(event) => togglePage(account, event.target.checked)}
+                                                        />
+                                                        {togglingPageId === account.id ? 'Saving…' : account.is_active ? 'Active' : 'Inactive'}
+                                                    </label>
+                                                ) : (
+                                                    <span className={`text-xs font-medium ${account.is_active && account.is_ready ? 'text-emerald-700' : 'text-zinc-500'}`}>
+                                                        {account.is_active && account.is_ready ? 'Ready to post' : account.is_active ? 'Needs token' : 'Inactive'}
+                                                    </span>
+                                                )}
+                                                {canManageMeta && (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="secondary"
+                                                        onClick={() => router.delete(`/posting/tiktok/${account.id}`, {
+                                                            preserveScroll: true,
+                                                            preserveState: true,
+                                                        })}
+                                                    >
+                                                        Disconnect
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : canManageMeta && tiktokConfigured ? (
+                                <div className="p-4">
+                                    <EmptyState title="No TikTok accounts yet" body="Choose a brand above and click Connect TikTok to authorize the account that should receive videos." />
+                                </div>
+                            ) : null}
+                        </>
+                    )}
+
+                    {(settingsPlatform === 'instagram' || settingsPlatform === 'youtube') && (
                         <div className="p-4">
                             <EmptyState
-                                title="Waiting on shared pages"
-                                body="Ask an admin or manager to connect Meta and activate Facebook pages for your brand. You can post as soon as those pages are ready."
+                                title={`${settingsPlatform === 'instagram' ? 'Instagram' : 'YouTube'} settings coming soon`}
+                                body="Tabs are ready so you can set these up next. For now, focus on Facebook posting and TikTok video cross-post."
                             />
                         </div>
                     )}
-
-                    {hasAnyPages ? (
-                        <ul className="divide-y divide-zinc-100">
-                            {pages.map((page) => (
-                                <li key={page.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                                    <div className="min-w-0">
-                                        <p className="font-medium text-zinc-900">
-                                            {page.name}
-                                            {page.handle ? <span className="font-normal text-zinc-500"> @{page.handle}</span> : null}
-                                        </p>
-                                        <p className="text-xs text-zinc-500">
-                                            {page.brand?.name ? `${page.brand.name} · ` : ''}
-                                            {page.is_ready ? 'Connected (token ready)' : 'Missing Page ID / token — reconnect Meta'}
-                                            {' · '}
-                                            {page.is_active ? 'Active for posting' : 'Inactive'}
-                                            {page.can_post === false ? ' · View only' : ''}
-                                        </p>
-                                    </div>
-                                    {canManagePages ? (
-                                        <label className="flex items-center gap-2 text-sm text-zinc-700">
-                                            <input
-                                                type="checkbox"
-                                                className="h-4 w-4 rounded border-zinc-300 text-brand-700 focus:ring-brand-600"
-                                                checked={page.is_active}
-                                                disabled={!page.is_ready || togglingPageId === page.id}
-                                                onChange={(event) => togglePage(page, event.target.checked)}
-                                            />
-                                            {togglingPageId === page.id ? 'Saving…' : page.is_active ? 'Active' : 'Inactive'}
-                                        </label>
-                                    ) : (
-                                        <span className={`text-xs font-medium ${page.is_active && page.is_ready ? 'text-emerald-700' : 'text-zinc-500'}`}>
-                                            {page.is_active && page.is_ready ? 'Ready to post' : page.is_active ? 'Needs token' : 'Inactive'}
-                                        </span>
-                                    )}
-                                </li>
-                            ))}
-                        </ul>
-                    ) : canManageMeta && metaConnected ? (
-                        <div className="p-4">
-                            <EmptyState title="No pages loaded" body="Click Refresh pages to pull every Facebook Page you manage from Meta." />
-                        </div>
-                    ) : null}
                 </section>
             )}
         </AppLayout>
@@ -1102,6 +1401,106 @@ function MetaCredentialsPanel({
                             className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500 hover:text-zinc-800"
                             onClick={() => setShowSecret((open) => !open)}
                             aria-label={showSecret ? 'Hide app secret' : 'Show app secret'}
+                            title={showSecret ? 'Hide' : 'Show'}
+                        >
+                            {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                    </div>
+                </Field>
+                <div className="sm:col-span-2">
+                    <Button type="submit" size="sm" disabled={form.processing}>
+                        {form.processing ? 'Saving…' : configured ? 'Update credentials' : 'Save credentials'}
+                    </Button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+function TikTokCredentialsPanel({
+    configured,
+    clientKey,
+    clientSecret,
+    redirectUri,
+}: {
+    configured: boolean;
+    clientKey: string;
+    clientSecret: string;
+    redirectUri: string;
+}) {
+    const basePath = usePage<SharedProps>().props.basePath ?? '';
+    const [showSecret, setShowSecret] = useState(false);
+    const form = useForm({
+        client_key: clientKey || '',
+        client_secret: clientSecret || '',
+    });
+
+    useEffect(() => {
+        form.setData({
+            client_key: clientKey || '',
+            client_secret: clientSecret || '',
+        });
+    }, [clientKey, clientSecret]);
+
+    function save(event: FormEvent) {
+        event.preventDefault();
+        form.post('/posting/tiktok/credentials', {
+            preserveScroll: true,
+        });
+    }
+
+    return (
+        <div className={`m-4 space-y-3 rounded-lg border px-3 py-3 text-sm ${configured ? 'border-zinc-200 bg-zinc-50 text-zinc-800' : 'border-amber-200 bg-amber-50 text-amber-950'}`}>
+            <div>
+                <p className="font-medium">
+                    {configured ? 'TikTok app credentials' : 'Save TikTok Client Key and Secret'}
+                </p>
+                <p className="mt-1 text-xs opacity-90">
+                    From{' '}
+                    <a className="font-medium underline" href="https://developers.tiktok.com/" target="_blank" rel="noreferrer">
+                        TikTok for Developers
+                    </a>
+                    {' '}→ your app → Credentials. Enable Login Kit and Content Posting API (Direct Post). Request the{' '}
+                    <code className="rounded bg-white/80 px-1">video.publish</code> scope. Add this exact redirect URI in Login Kit:
+                </p>
+                {redirectUri ? (
+                    <code className="mt-2 block break-all rounded-md bg-white/80 px-2 py-1.5 text-[11px] text-zinc-900 ring-1 ring-zinc-200">
+                        {redirectUri}
+                    </code>
+                ) : null}
+                <p className="mt-2 text-xs opacity-90">
+                    Privacy / Terms for the TikTok app review:{' '}
+                    <a className="font-medium underline" href={withBase('/privacy', basePath)} target="_blank" rel="noreferrer">Privacy Policy</a>
+                    {' · '}
+                    <a className="font-medium underline" href={withBase('/terms', basePath)} target="_blank" rel="noreferrer">Terms of Service</a>
+                </p>
+            </div>
+            <form className="grid gap-2 sm:grid-cols-2" onSubmit={save}>
+                <Field label="Client Key" error={form.errors.client_key}>
+                    <Input
+                        value={form.data.client_key}
+                        onChange={(event) => form.setData('client_key', event.target.value)}
+                        placeholder="TikTok Client Key"
+                        required
+                        autoComplete="off"
+                    />
+                </Field>
+                <Field label="Client Secret" error={form.errors.client_secret}>
+                    <div className="relative">
+                        <Input
+                            type={showSecret ? 'text' : 'password'}
+                            value={form.data.client_secret}
+                            onChange={(event) => form.setData('client_secret', event.target.value)}
+                            placeholder="TikTok Client Secret"
+                            required={!configured}
+                            autoComplete="off"
+                            className="pr-10"
+                        />
+                        <button
+                            type="button"
+                            className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500 hover:text-zinc-800"
+                            onClick={() => setShowSecret((open) => !open)}
+                            aria-label={showSecret ? 'Hide client secret' : 'Show client secret'}
                             title={showSecret ? 'Hide' : 'Show'}
                         >
                             {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

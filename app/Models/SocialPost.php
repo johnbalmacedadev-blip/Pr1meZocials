@@ -17,6 +17,8 @@ class SocialPost extends Model
         'media_name',
         'media_files',
         'facebook_post_id',
+        'tiktok_publish_id',
+        'cross_post_of_id',
         'permalink_url',
         'status',
         'error_message',
@@ -96,9 +98,14 @@ class SocialPost extends Model
         return $this->belongsTo(ContentItem::class);
     }
 
+    public function crossPostOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'cross_post_of_id');
+    }
+
     public function isPublished(): bool
     {
-        return $this->status === 'published' && filled($this->facebook_post_id);
+        return $this->status === 'published' && (filled($this->facebook_post_id) || filled($this->tiktok_publish_id));
     }
 
     public function isScheduled(): bool

@@ -72,4 +72,9 @@ class SocialAccount extends Model
         // change even when the token is no longer usable.
         return filled($this->external_id) && filled($this->access_token);
     }
+
+    public function isTikTokReady(): bool
+    {
+        return filled($this->external_id) && filled($this->access_token);
+    }
 }
