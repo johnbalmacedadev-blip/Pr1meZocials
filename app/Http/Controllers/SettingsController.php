@@ -34,6 +34,7 @@ class SettingsController extends Controller
 
         return Inertia::render('Settings/Index', [
             'section' => $request->string('section')->toString() ?: 'general',
+            'emailNotifications' => NotificationPreferenceController::props($request),
             'users' => $user->hasPermission('users.view') || $user->hasPermission('users.manage')
                 ? User::query()
                     ->with(['roles:id,name,slug', 'brands:id,name', 'socialAccounts:id,name,brand_id'])

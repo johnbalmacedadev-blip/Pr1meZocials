@@ -16,6 +16,7 @@ class ProfileController extends Controller
     {
         return Inertia::render('Profile/Edit', [
             'profile' => $request->user()->only(['name', 'email', 'job_title']),
+            'emailNotifications' => NotificationPreferenceController::props($request),
         ]);
     }
 

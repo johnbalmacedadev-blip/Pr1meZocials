@@ -2,6 +2,7 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { Pencil, Trash2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import EmailNotificationSettings, { EmailNotificationProps } from '@/Components/EmailNotificationSettings';
 import PlatformIcon from '@/Components/PlatformIcon';
 import { Button, Field, Input, PageHeader, Select, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
@@ -47,10 +48,11 @@ interface Invite {
     created_at: string | null;
 }
 
-const sections = ['general', 'users', 'brands', 'platforms', 'workflow', 'taxonomy'] as const;
+const sections = ['general', 'notifications', 'users', 'brands', 'platforms', 'workflow', 'taxonomy'] as const;
 
-export default function Settings({ section, users, roles, brands, facebookPages = [], platforms, statuses, pillars, objectives, segments, tags, settings, invites, abilities }: {
+export default function Settings({ section, emailNotifications, users, roles, brands, facebookPages = [], platforms, statuses, pillars, objectives, segments, tags, settings, invites, abilities }: {
     section: string;
+    emailNotifications: EmailNotificationProps;
     users: Person[];
     roles: Role[];
     brands: Brand[];
@@ -71,6 +73,7 @@ export default function Settings({ section, users, roles, brands, facebookPages 
         if (item === 'workflow') return abilities.workflow;
         if (item === 'taxonomy') return abilities.taxonomy || abilities.tags;
         if (item === 'general') return abilities.settings;
+        if (item === 'notifications') return true;
         return abilities.brands || brands.length > 0;
     });
 
@@ -84,6 +87,7 @@ export default function Settings({ section, users, roles, brands, facebookPages 
                 ))}
             </div>
             {section === 'general' && abilities.settings && <GeneralForm settings={settings} />}
+            {section === 'notifications' && <EmailNotificationSettings {...emailNotifications} />}
             {section === 'users' && <UsersSection users={users} roles={roles} brands={brands} facebookPages={facebookPages} invites={invites} canManage={abilities.users} />}
             {section === 'brands' && <BrandsSection brands={brands} canManage={abilities.brands} />}
             {section === 'platforms' && abilities.platforms && <PlatformsSection platforms={platforms} />}

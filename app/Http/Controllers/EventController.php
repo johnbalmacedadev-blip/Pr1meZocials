@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use App\Models\EventOccurrence;
 use App\Services\EventOccurrenceGenerator;
+use App\Services\NotificationService;
 use App\Support\FormOptions;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -96,7 +97,7 @@ class EventController extends Controller
         ]);
     }
 
-    public function store(Request $request, EventOccurrenceGenerator $generator): RedirectResponse
+    public function store(Request $request, EventOccurrenceGenerator $generator, NotificationService $notifications): RedirectResponse
     {
         $this->authorize('create', Event::class);
         $data = $this->validated($request);
@@ -112,6 +113,23 @@ class EventController extends Controller
         ]);
 
         $generator->sync($event);
+
+        $event->load('brand:id,name');
+        $when = $event->starts_on?->toFormattedDateString()
+            .($event->start_time ? ' at '.Carbon::parse($event->start_time)->format('g:i A') : '')
+            .($event->recurrence && $event->recurrence !== 'none' ? ' ('.$event->recurrenceLabel().')' : '');
+
+        foreach ($notifications->brandAudience($event->brand_id, 'events.view', $request->user()) as $person) {
+            $notifications->send(
+                $person,
+                'event_created',
+                'New event: '.$event->title,
+                $request->user()->name.' added '.$event->title.' for '.($event->brand?->name ?? 'your brand').' on '.$when.'.'
+                    .($event->location ? ' Location: '.$event->location.'.' : ''),
+                'event-created:'.$event->id,
+                ['event_id' => $event->id],
+            );
+        }
 
         return redirect()->route('events.show', $event)->with('success', 'Event created. Upload a poster or video invitation on each date as needed.');
     }

@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -696,6 +697,24 @@ class SocialPostingController extends Controller
                 'scheduled_publish_at' => $published->scheduled_publish_at?->toIso8601String(),
             ],
         );
+
+        $caption = Str::limit(trim((string) $data['caption']), 160);
+        foreach ($notifications->brandAudience($account->brand_id, null, $request->user()) as $person) {
+            $notifications->send(
+                $person,
+                'content_posted',
+                $scheduled ? 'New post scheduled on '.$pageName : 'New post on '.$pageName,
+                $request->user()->name.($scheduled
+                    ? ' scheduled a Facebook post for '.$published->scheduled_publish_at?->timezone(config('app.timezone'))->format('M j, Y g:i A').'.'
+                    : ' posted to '.$pageName.' on Facebook.')
+                    .($caption !== '' ? ' "'.$caption.'"' : ''),
+                'content-posted:'.$published->id,
+                [
+                    'social_post_id' => $published->id,
+                    'permalink_url' => $published->permalink_url,
+                ],
+            );
+        }
 
         $returnTo = $data['return_to'] ?? null;
         if (is_string($returnTo) && str_starts_with($returnTo, '/posting-schedule')) {

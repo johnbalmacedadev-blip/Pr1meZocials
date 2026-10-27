@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\EmailNotificationCatalog;
 use App\Support\SafeEncrypted;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,6 +25,7 @@ class User extends Authenticatable
         'password',
         'job_title',
         'is_active',
+        'email_notifications',
         'facebook_user_token',
         'facebook_token_expires_at',
     ];
@@ -40,6 +42,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'email_notifications' => 'array',
             'last_seen_at' => 'datetime',
             'facebook_token_expires_at' => 'datetime',
         ];
@@ -136,6 +139,24 @@ class User extends Authenticatable
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function emailNotificationCategories(): array
+    {
+        return array_values(array_intersect(
+            EmailNotificationCatalog::keys(),
+            $this->email_notifications ?? [],
+        ));
+    }
+
+    public function wantsEmailFor(string $type): bool
+    {
+        $category = EmailNotificationCatalog::categoryFor($type);
+
+        return $category !== null && in_array($category, $this->emailNotificationCategories(), true);
     }
 
     public function canAccessBrand(int $brandId): bool

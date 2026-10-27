@@ -3,8 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\ContentItem;
+use App\Models\EventOccurrence;
 use App\Models\Setting;
 use App\Services\NotificationService;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 
 class ScanDeadlines extends Command
@@ -63,6 +65,43 @@ class ScanDeadlines extends Command
 
         $this->info('Checked '.($soon->count() + $overdue->count()).' dated content items.');
 
+        $this->remindUpcomingEvents($notifications);
+
         return self::SUCCESS;
+    }
+
+    private function remindUpcomingEvents(NotificationService $notifications): void
+    {
+        $tomorrow = now()->addDay()->toDateString();
+
+        $occurrences = EventOccurrence::query()
+            ->whereDate('occurs_on', $tomorrow)
+            ->where('status', 'scheduled')
+            ->whereHas('event', fn ($query) => $query->where('status', 'active'))
+            ->with('event.brand:id,name')
+            ->get();
+
+        $audiences = [];
+
+        foreach ($occurrences as $occurrence) {
+            $event = $occurrence->event;
+            $audiences[$event->brand_id] ??= $notifications->brandAudience($event->brand_id, 'events.view');
+            $time = $occurrence->start_time ?: $event->start_time;
+
+            foreach ($audiences[$event->brand_id] as $person) {
+                $notifications->send(
+                    $person,
+                    'event_upcoming',
+                    'Event tomorrow: '.$occurrence->displayTitle(),
+                    $occurrence->displayTitle().' for '.($event->brand?->name ?? 'your brand').' is on '.$occurrence->occurs_on->toFormattedDateString()
+                        .($time ? ' at '.Carbon::parse($time)->format('g:i A') : '').'.'
+                        .($event->location ? ' Location: '.$event->location.'.' : ''),
+                    'event-upcoming:'.$occurrence->id,
+                    ['event_id' => $event->id],
+                );
+            }
+        }
+
+        $this->info('Sent reminders for '.$occurrences->count().' upcoming event dates.');
     }
 }

@@ -195,5 +195,26 @@ class ContentWorkflow
                 $link,
             );
         }
+
+        // Everyone on the task hears about the move, except the owner when they already got an approval or revision note.
+        $item->loadMissing('collaborators');
+        $toName = $item->status?->name ?? str_replace('_', ' ', $toSlug);
+        $watchers = collect([$item->owner])
+            ->merge($item->collaborators)
+            ->filter()
+            ->unique('id')
+            ->reject(fn (User $person) => $person->id === $actor->id)
+            ->reject(fn (User $person) => ($sentBack || $toSlug === 'approved') && $person->id === $item->owner?->id);
+
+        foreach ($watchers as $person) {
+            $this->notifications->send(
+                $person,
+                'status_changed',
+                'Task status changed',
+                $item->reference_number.' · '.$item->title.' moved to '.$toName.' by '.$actor->name.'.',
+                'status:'.$item->id.':'.$person->id.':'.$eventKey,
+                $link,
+            );
+        }
     }
 }

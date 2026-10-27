@@ -11,6 +11,7 @@ use App\Http\Controllers\EventController;
 use App\Http\Controllers\InspirationController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NotificationPreferenceController;
 use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\PlatformVersionController;
 use App\Http\Controllers\PostingScheduleController;
@@ -179,4 +180,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
+    Route::put('/notification-preferences', [NotificationPreferenceController::class, 'update'])->name('notification-preferences.update');
+    Route::post('/notification-preferences/test', [NotificationPreferenceController::class, 'test'])->middleware('throttle:6,1')->name('notification-preferences.test');
 });
