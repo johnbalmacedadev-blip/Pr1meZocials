@@ -28,26 +28,19 @@ interface InstallPromptEvent extends Event {
     userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
-const INSTALLED_FLAG = 'primez-app-installed';
+// Older builds remembered "installed" forever, which hid the button after an uninstall.
+const LEGACY_INSTALLED_FLAG = 'primez-app-installed';
 
 const media = (query: string) => typeof window !== 'undefined' && window.matchMedia?.(query).matches;
 const isStandalone = () => Boolean(media('(display-mode: standalone)') || (navigator as Navigator & { standalone?: boolean }).standalone);
 const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 
-function readFlag() {
+function clearLegacyFlag() {
     try {
-        return localStorage.getItem(INSTALLED_FLAG) === '1';
+        localStorage.removeItem(LEGACY_INSTALLED_FLAG);
     } catch {
-        return false;
-    }
-}
-
-function writeFlag() {
-    try {
-        localStorage.setItem(INSTALLED_FLAG, '1');
-    } catch {
-        // Private mode: the flag is a convenience only.
+        // Private mode: nothing was stored.
     }
 }
 
@@ -57,7 +50,8 @@ let started = false;
 let state: PwaState = typeof window === 'undefined'
     ? { installed: false, standalone: false, canPrompt: false, ios: false, touch: false, push: 'unsupported', needsTap: false, error: '' }
     : {
-        installed: isStandalone() || readFlag(),
+        // Never remembered: an uninstall leaves browser storage behind, so detect it fresh each load.
+        installed: isStandalone(),
         standalone: isStandalone(),
         canPrompt: false,
         ios: isIos(),
@@ -74,15 +68,16 @@ function setState(patch: Partial<PwaState>) {
 }
 
 // Chrome fires this once, early; capture it at import time so it is never missed.
+// It only fires when the app is NOT installed, so it also undoes any earlier "installed" guess.
 if (typeof window !== 'undefined') {
+    clearLegacyFlag();
     window.addEventListener('beforeinstallprompt', (event) => {
         event.preventDefault();
         deferredPrompt = event as InstallPromptEvent;
-        setState({ canPrompt: true });
+        setState({ canPrompt: true, installed: state.standalone });
     });
     window.addEventListener('appinstalled', () => {
         deferredPrompt = null;
-        writeFlag();
         setState({ installed: true, canPrompt: false });
     });
 }
@@ -175,7 +170,6 @@ export async function promptInstall(): Promise<boolean> {
     await prompt.prompt();
     const choice = await prompt.userChoice;
     if (choice.outcome === 'accepted') {
-        writeFlag();
         setState({ installed: true });
     }
     return true;
@@ -194,8 +188,7 @@ export async function startPwa(base: string) {
         const related = (navigator as Navigator & { getInstalledRelatedApps?: () => Promise<unknown[]> }).getInstalledRelatedApps;
         if (!state.installed && related) {
             const apps = await related.call(navigator).catch(() => []);
-            if (apps.length > 0) {
-                writeFlag();
+            if (apps.length > 0 && !deferredPrompt) {
                 setState({ installed: true });
             }
         }
