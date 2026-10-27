@@ -202,12 +202,13 @@ export default function PostingSchedule({
                             </Select>
                         </label>
                     </div>
-                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                        <Button type="button" size="sm" variant="secondary" onClick={() => goToWeek(week.prev)} aria-label="Previous week">
+                    {/* One line on phones: arrow-only buttons, the week label takes the rest. */}
+                    <div className="mx-auto mt-4 flex max-w-md items-center justify-between gap-2 sm:max-w-none sm:justify-center">
+                        <Button type="button" size="sm" variant="secondary" className="shrink-0" onClick={() => goToWeek(week.prev)} aria-label="Previous week">
                             <ChevronLeft className="h-4 w-4" />
-                            Previous
+                            <span className="hidden sm:inline">Previous</span>
                         </Button>
-                        <div className="min-w-[12rem] text-center">
+                        <div className="min-w-0 flex-1 text-center sm:min-w-[12rem] sm:flex-none">
                             <p className="text-sm font-semibold text-zinc-900">{week.label}</p>
                             {!week.is_current && (
                                 <button type="button" className="mt-0.5 text-xs font-medium text-brand-700 hover:underline" onClick={() => goToWeek(new Date().toISOString().slice(0, 10))}>
@@ -215,8 +216,8 @@ export default function PostingSchedule({
                                 </button>
                             )}
                         </div>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => goToWeek(week.next)} aria-label="Next week">
-                            Next
+                        <Button type="button" size="sm" variant="secondary" className="shrink-0" onClick={() => goToWeek(week.next)} aria-label="Next week">
+                            <span className="hidden sm:inline">Next</span>
                             <ChevronRight className="h-4 w-4" />
                         </Button>
                     </div>
