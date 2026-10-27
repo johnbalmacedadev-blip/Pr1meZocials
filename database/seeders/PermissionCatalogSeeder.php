@@ -92,6 +92,19 @@ class PermissionCatalogSeeder extends Seeder
                     'created_by' => null,
                 ],
             );
+
+            // Soft-add Events Calendar permissions once; do not overwrite custom role matrices.
+            $hasEvents = $role->permissions()->where('slug', 'like', 'events.%')->exists();
+            if (! $hasEvents) {
+                $eventSlugs = array_values(array_filter(
+                    PageAccess::expand($defaults['matrix'], $defaults['extras']),
+                    fn (string $permission) => str_starts_with($permission, 'events.'),
+                ));
+                if ($eventSlugs !== []) {
+                    $ids = Permission::query()->whereIn('slug', $eventSlugs)->pluck('id');
+                    $role->permissions()->syncWithoutDetaching($ids);
+                }
+            }
         }
     }
 }
