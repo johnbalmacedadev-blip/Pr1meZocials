@@ -10,6 +10,10 @@ use Throwable;
 /**
  * Shared-hosting bootstrap: keep the schema current after every git pull,
  * and seed once when the database is empty.
+ *
+ * PHP starts fresh on every request, so this used to migrate and re-seed the
+ * permission catalog (80+ queries) on every page, chat poll and upload chunk.
+ * It now only runs when the migrations or seeders change, i.e. after a deploy.
  */
 class EnsureProductionReady
 {
@@ -22,6 +26,12 @@ class EnsureProductionReady
         }
 
         self::$attempted = true;
+
+        $fingerprintPath = storage_path('framework/deploy.fingerprint');
+        $fingerprint = self::fingerprint();
+        if (@file_get_contents($fingerprintPath) === $fingerprint) {
+            return;
+        }
 
         foreach ([
             storage_path('app/public'),
@@ -57,6 +67,9 @@ class EnsureProductionReady
                 }
                 @file_put_contents($lockPath, date('c').PHP_EOL);
             }
+
+            // Only remember success, so a failed migration is retried on the next request.
+            @file_put_contents($fingerprintPath, $fingerprint);
         } catch (Throwable $exception) {
             @file_put_contents(
                 storage_path('logs/deploy-bootstrap.log'),
@@ -64,5 +77,24 @@ class EnsureProductionReady
                 FILE_APPEND
             );
         }
+    }
+
+    /**
+     * Changes whenever a pull adds or edits a migration, a seeder, or the permission map.
+     */
+    private static function fingerprint(): string
+    {
+        $files = array_merge(
+            glob(database_path('migrations/*.php')) ?: [],
+            glob(database_path('seeders/*.php')) ?: [],
+            [app_path('Support/PageAccess.php')],
+        );
+
+        $parts = [];
+        foreach ($files as $file) {
+            $parts[] = basename($file).':'.@filesize($file).':'.@filemtime($file);
+        }
+
+        return md5(implode('|', $parts));
     }
 }

@@ -40,18 +40,23 @@ class MediaUploadController extends Controller
         $this->pruneStale($request->user()->id);
 
         $id = (string) Str::uuid();
+        $chunkSize = $this->chunkSize();
         $this->writeMeta($request->user()->id, $id, [
             'name' => $data['name'],
             'size' => (int) $data['size'],
             'extension' => $extension,
-            'received' => 0,
+            'chunk_size' => $chunkSize,
+            'chunks' => (int) ceil($data['size'] / $chunkSize),
             'path' => null,
         ]);
-        Storage::disk('local')->put($this->partPath($request->user()->id, $id), '');
 
-        return response()->json(['upload_id' => $id, 'chunk_size' => $this->chunkSize()]);
+        return response()->json(['upload_id' => $id, 'chunk_size' => $chunkSize]);
     }
 
+    /**
+     * Stores one numbered piece. Pieces may arrive in any order and in parallel, and a
+     * retried piece simply overwrites itself; finish() joins them in order.
+     */
     public function chunk(Request $request, string $upload): JsonResponse
     {
         $userId = $request->user()->id;
@@ -59,30 +64,17 @@ class MediaUploadController extends Controller
         abort_if($meta['path'] !== null, 409, 'This upload is already finished.');
 
         $request->validate([
-            'offset' => ['required', 'integer', 'min:0'],
-            'chunk' => ['required', 'file', 'max:'.(int) ceil($this->chunkSize() / 1024) + 64],
+            'index' => ['required', 'integer', 'min:0', 'max:'.($meta['chunks'] - 1)],
+            'chunk' => ['required', 'file'],
         ]);
 
-        // Chunks must arrive in order; a repeated chunk (retry after a timeout) is acknowledged, not appended.
-        $offset = $request->integer('offset');
-        if ($offset < $meta['received']) {
-            return response()->json(['received' => $meta['received']]);
-        }
-        abort_if($offset !== $meta['received'], 409, 'Upload is out of order. Please try again.');
+        $index = $request->integer('index');
+        $expected = min($meta['chunk_size'], $meta['size'] - $index * $meta['chunk_size']);
+        abort_if((int) $request->file('chunk')->getSize() !== $expected, 422, 'Upload piece has the wrong size. Please try again.');
 
-        $bytes = (int) $request->file('chunk')->getSize();
-        abort_if($meta['received'] + $bytes > $meta['size'], 422, 'Upload is larger than announced.');
+        $request->file('chunk')->storeAs($this->piecesDir($userId, $upload), $index.'.part', 'local');
 
-        $source = fopen($request->file('chunk')->getRealPath(), 'rb');
-        $target = fopen(Storage::disk('local')->path($this->partPath($userId, $upload)), 'ab');
-        stream_copy_to_stream($source, $target);
-        fclose($source);
-        fclose($target);
-
-        $meta['received'] += $bytes;
-        $this->writeMeta($userId, $upload, $meta);
-
-        return response()->json(['received' => $meta['received']]);
+        return response()->json(['index' => $index]);
     }
 
     public function finish(Request $request, string $upload): JsonResponse
@@ -91,17 +83,31 @@ class MediaUploadController extends Controller
         $meta = $this->meta($userId, $upload);
 
         if ($meta['path'] === null) {
-            $part = $this->partPath($userId, $upload);
-            abort_if($meta['received'] !== $meta['size'] || Storage::disk('local')->size($part) !== $meta['size'], 422, 'The upload is incomplete. Please try again.');
+            $disk = Storage::disk('local');
+            $dir = $this->piecesDir($userId, $upload);
 
-            $mime = (string) (mime_content_type(Storage::disk('local')->path($part)) ?: '');
+            for ($index = 0; $index < $meta['chunks']; $index++) {
+                $expected = min($meta['chunk_size'], $meta['size'] - $index * $meta['chunk_size']);
+                abort_unless($disk->exists($dir.'/'.$index.'.part') && $disk->size($dir.'/'.$index.'.part') === $expected, 422, 'The upload is incomplete. Please try again.');
+            }
+
+            $mime = (string) (mime_content_type($disk->path($dir.'/0.part')) ?: '');
             if (! str_starts_with($mime, 'video/') && $mime !== 'application/octet-stream') {
-                Storage::disk('local')->delete($part);
+                $disk->deleteDirectory($dir);
                 throw ValidationException::withMessages(['media' => 'That file is not a video.']);
             }
 
             $final = 'social-posts/'.$userId.'/'.$upload.'.'.$meta['extension'];
-            Storage::disk('local')->move($part, $final);
+            $disk->makeDirectory(dirname($final));
+            $target = fopen($disk->path($final), 'wb');
+            for ($index = 0; $index < $meta['chunks']; $index++) {
+                $source = fopen($disk->path($dir.'/'.$index.'.part'), 'rb');
+                stream_copy_to_stream($source, $target);
+                fclose($source);
+            }
+            fclose($target);
+            $disk->deleteDirectory($dir);
+
             $meta['path'] = $final;
             $this->writeMeta($userId, $upload, $meta);
         }
@@ -127,18 +133,20 @@ class MediaUploadController extends Controller
     }
 
     /**
-     * Largest piece that fits under this server's request limits, between 1 MB and 8 MB.
+     * Largest piece that fits under this server's request limits, between 1 MB and 16 MB.
+     * Fewer, bigger pieces mean fewer round trips to a far-away server.
      */
     private function chunkSize(): int
     {
         $limit = min(self::iniBytes((string) ini_get('upload_max_filesize')), self::iniBytes((string) ini_get('post_max_size')));
-        $limit = $limit > 0 ? $limit - 256 * 1024 : 8 * 1024 * 1024;
+        $cap = max(1, (int) config('ops.video_chunk_max_mb', 16)) * 1024 * 1024;
+        $limit = $limit > 0 ? $limit - 256 * 1024 : $cap;
 
-        return max(1024 * 1024, min(8 * 1024 * 1024, $limit));
+        return max(1024 * 1024, min($cap, $limit));
     }
 
     /**
-     * @return array{name: string, size: int, extension: string, received: int, path: string|null}
+     * @return array{name: string, size: int, extension: string, chunk_size: int, chunks: int, path: string|null}
      */
     private function meta(int $userId, string $upload): array
     {
@@ -162,18 +170,20 @@ class MediaUploadController extends Controller
         return self::DIR.'/'.$userId.'/'.$upload.'.json';
     }
 
-    private function partPath(int $userId, string $upload): string
+    private function piecesDir(int $userId, string $upload): string
     {
-        return self::DIR.'/'.$userId.'/'.$upload.'.part';
+        return self::DIR.'/'.$userId.'/'.$upload;
     }
 
     /** Abandoned uploads older than a day are removed so they do not fill the disk. */
     private function pruneStale(int $userId): void
     {
         $disk = Storage::disk('local');
+        $cutoff = now()->subDay()->getTimestamp();
         foreach ($disk->files(self::DIR.'/'.$userId) as $file) {
-            if ($disk->lastModified($file) < now()->subDay()->getTimestamp()) {
+            if ($disk->lastModified($file) < $cutoff) {
                 $disk->delete($file);
+                $disk->deleteDirectory(substr($file, 0, -strlen('.json')));
             }
         }
     }

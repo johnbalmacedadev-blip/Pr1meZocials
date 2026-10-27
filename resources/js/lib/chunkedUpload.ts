@@ -1,5 +1,7 @@
 import { withBase } from '@/lib/utils';
 
+const PARALLEL_PIECES = 3;
+
 /**
  * Uploads a large file in small pieces so no single request exceeds the server's
  * post_max_size. Resolves with the upload id to submit instead of the file.
@@ -37,28 +39,36 @@ export async function uploadInChunks(file: File, basePath: string, onProgress: (
         true,
     );
 
-    let offset = 0;
+    const total = Math.ceil(file.size / chunkSize);
+    let next = 0;
+    let uploaded = 0;
     onProgress(0);
-    while (offset < file.size) {
-        const piece = file.slice(offset, offset + chunkSize);
-        let attempt = 0;
-        // Retry each piece a few times so a flaky mobile connection doesn't restart the whole video.
-        for (;;) {
-            try {
-                const form = new FormData();
-                form.append('offset', String(offset));
-                form.append('chunk', piece, 'chunk');
-                const { received } = await send<{ received: number }>(`/posting/uploads/${id}/chunk`, form);
-                offset = received;
-                break;
-            } catch (error) {
-                attempt += 1;
-                if (attempt >= 4) throw error;
-                await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+
+    // Several pieces in flight at once, so the wait for each round trip to a distant
+    // server overlaps instead of adding up.
+    async function worker() {
+        while (next < total) {
+            const index = next++;
+            const piece = file.slice(index * chunkSize, (index + 1) * chunkSize);
+            // Retry each piece a few times so a flaky mobile connection doesn't restart the whole video.
+            for (let attempt = 1; ; attempt++) {
+                try {
+                    const form = new FormData();
+                    form.append('index', String(index));
+                    form.append('chunk', piece, 'chunk');
+                    await send(`/posting/uploads/${id}/chunk`, form);
+                    break;
+                } catch (error) {
+                    if (attempt >= 4) throw error;
+                    await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+                }
             }
+            uploaded += piece.size;
+            onProgress(Math.min(99, Math.round((uploaded / file.size) * 100)));
         }
-        onProgress(Math.round((offset / file.size) * 100));
     }
+
+    await Promise.all(Array.from({ length: Math.min(PARALLEL_PIECES, total) }, () => worker()));
 
     await send(`/posting/uploads/${id}/finish`, '{}', true);
     return id;

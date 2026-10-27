@@ -5,6 +5,7 @@
 /storage/*.key
 /storage/pail
 /storage/framework/install.lock
+/storage/framework/deploy.fingerprint
 /storage/logs/*.log
 /storage/app/facebook-credentials.json
 # Active .env is committed as LIVE for pull-and-run shared hosting.
