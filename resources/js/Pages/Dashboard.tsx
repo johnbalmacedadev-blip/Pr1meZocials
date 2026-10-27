@@ -206,6 +206,10 @@ function MonthSchedule({ schedule, filters }: { schedule: Schedule; filters: Rec
         end: endOfWeek(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0), { weekStartsOn: 1 }),
     });
 
+    const todayKey = format(new Date(), 'yyyy-MM-dd');
+    const [selected, setSelected] = useState(() => (isSameMonth(new Date(), anchor) ? todayKey : format(anchor, 'yyyy-MM-dd')));
+    const selectedItems = schedule.events.filter((event) => event.date === selected);
+
     function openMonth(month: string) {
         visitFilters('/dashboard', { ...filters, month });
     }
@@ -213,7 +217,7 @@ function MonthSchedule({ schedule, filters }: { schedule: Schedule; filters: Rec
     return (
         <div>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-zinc-500">Publishing dates and Facebook posts for the month. Same Facebook items as Posting Schedule.</p>
+                <p className="hidden text-sm text-zinc-500 sm:block">Publishing dates and Facebook posts for the month. Same Facebook items as Posting Schedule.</p>
                 <div className="flex flex-wrap items-center gap-2">
                     <button type="button" className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => openMonth(format(addMonths(anchor, -1), 'yyyy-MM-dd'))}>Previous</button>
                     <button type="button" className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => openMonth(format(new Date(), 'yyyy-MM-dd'))}>Today</button>
@@ -221,7 +225,60 @@ function MonthSchedule({ schedule, filters }: { schedule: Schedule; filters: Rec
                     <strong className="px-1 text-sm">{schedule.label}</strong>
                 </div>
             </div>
-            <div className="overflow-x-auto">
+            {/* Phones: compact month with dots, plus the tapped day's posts, so it fits without scrolling. */}
+            <div className="sm:hidden">
+                <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-medium text-zinc-500">
+                    {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => <div key={index}>{day}</div>)}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                    {days.map((day) => {
+                        const key = format(day, 'yyyy-MM-dd');
+                        const items = schedule.events.filter((event) => event.date === key);
+                        const inMonth = isSameMonth(day, anchor);
+                        return (
+                            <button
+                                key={key}
+                                type="button"
+                                onClick={() => setSelected(key)}
+                                className={cn(
+                                    'flex h-11 flex-col items-center justify-start rounded-lg pt-1 text-xs',
+                                    inMonth ? 'text-zinc-800' : 'text-zinc-300',
+                                    key === selected ? 'bg-brand-700 font-semibold text-white' : isToday(day) ? 'bg-brand-50 font-semibold text-brand-700' : 'hover:bg-zinc-50',
+                                )}
+                                aria-label={`${format(day, 'MMMM d')}${items.length ? `, ${items.length} post${items.length === 1 ? '' : 's'}` : ''}`}
+                            >
+                                {format(day, 'd')}
+                                {items.length > 0 && (
+                                    <span className="mt-1 flex items-center gap-0.5">
+                                        {items.slice(0, 3).map((event) => (
+                                            <span key={event.id} className={cn('h-1.5 w-1.5 rounded-full', key === selected ? 'bg-white' : event.kind === 'facebook' ? 'bg-sky-500' : 'bg-brand-700')} />
+                                        ))}
+                                        {items.length > 3 && <span className={cn('text-[9px] leading-none', key === selected ? 'text-white' : 'text-zinc-500')}>+</span>}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+                <div className="mt-3 border-t border-zinc-100 pt-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">{format(parseISO(selected), 'EEEE, MMM d')}</p>
+                    {selectedItems.length === 0 && <p className="text-sm text-zinc-500">Nothing scheduled.</p>}
+                    <div className="max-h-40 space-y-1.5 overflow-y-auto">
+                        {selectedItems.map((event) => (
+                            <Link
+                                key={event.id}
+                                href={event.href || (event.content_id ? `/content/${event.content_id}` : '/posting')}
+                                className={cn('flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm', event.kind === 'facebook' ? 'bg-sky-50' : 'bg-brand-50')}
+                            >
+                                <span className="shrink-0 text-xs font-semibold text-zinc-600">{event.time}</span>
+                                <span className="min-w-0 flex-1 truncate font-medium text-zinc-900">{event.title}</span>
+                                <span className="shrink-0 text-xs text-zinc-500">{event.platform ?? 'No platform'}</span>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            </div>
+            <div className="hidden overflow-x-auto sm:block">
                 <div className="min-w-[52rem]">
                     <div className="mb-1 grid grid-cols-7 text-center text-xs font-medium text-zinc-500">
                         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <div key={day}>{day}</div>)}

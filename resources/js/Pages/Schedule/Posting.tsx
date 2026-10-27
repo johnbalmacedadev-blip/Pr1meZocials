@@ -1,5 +1,5 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ChevronLeft, ChevronRight, Clapperboard, Image as ImageIcon, Megaphone, Moon, Pencil, Plus, Sun, SunMedium, X } from 'lucide-react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { CalendarClock, ChevronLeft, ChevronRight, Clapperboard, GalleryHorizontal, Image as ImageIcon, Megaphone, Moon, Pencil, Plus, Repeat2, Sun, SunMedium, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import FacebookGlyph from '@/Components/FacebookGlyph';
 import { Button, Field, Input, Modal, Select } from '@/Components/ui';
@@ -7,62 +7,77 @@ import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
 import { formatDate } from '@/lib/utils';
 
-type Format = 'reel' | 'image' | 'company';
+type Format = 'poster' | 'reel' | 'carousel' | 'image' | 'reel_poster' | 'ugc';
 
 interface Slot {
     format: Format;
     title: string;
-    detail: string;
 }
 
-const flexNote = 'Any flexible content: announcements, events, promotions, activities, testimonials, recognition, photos, posters, or reels.';
+type SlotKey = 'morning' | 'afternoon' | 'flex' | 'evening';
 
-const flexSlot: Slot = { format: 'company', title: 'General Post', detail: flexNote };
-
-const days: { name: string; morning: Slot; afternoon: Slot; evening: Slot }[] = [
+/** Weekly Facebook plan ("The upgraded posting schedule"). */
+const days: ({ name: string } & Record<SlotKey, Slot>)[] = [
     {
         name: 'Monday',
-        morning: { format: 'reel', title: 'Motivation Reel', detail: 'Start the week with positivity and purpose.' },
-        afternoon: { format: 'image', title: 'Product Poster', detail: 'Showcase a specific product and key benefits.' },
-        evening: { format: 'reel', title: 'Business Opportunity', detail: 'Invite and inspire with the Prime Z opportunity.' },
+        morning: { format: 'poster', title: 'Motivation Monday' },
+        afternoon: { format: 'reel', title: 'Product Education' },
+        flex: { format: 'reel_poster', title: 'Company News' },
+        evening: { format: 'reel', title: 'Business Opportunity' },
     },
     {
         name: 'Tuesday',
-        morning: { format: 'image', title: 'Inspirational Quote', detail: 'Share a positive message or life reminder.' },
-        afternoon: { format: 'reel', title: 'Product Showcase', detail: 'Quick product demo or how to use it.' },
-        evening: { format: 'image', title: 'Product Benefits Infographic', detail: 'Highlight key ingredients and benefits.' },
+        morning: { format: 'reel', title: 'Funny Taglish' },
+        afternoon: { format: 'carousel', title: 'Benefits Carousel' },
+        flex: { format: 'reel_poster', title: 'Behind the Scenes' },
+        evening: { format: 'poster', title: 'Customer Story' },
     },
     {
         name: 'Wednesday',
-        morning: { format: 'reel', title: 'Funny Taglish Reel', detail: 'Keep it fun, relatable, and authentic.' },
-        afternoon: { format: 'image', title: 'Product Information', detail: 'Share product details, usage, and FAQs.' },
-        evening: { format: 'reel', title: 'Member Testimonial', detail: 'Real stories. Real people. Real results.' },
+        morning: { format: 'image', title: 'Relatable Meme' },
+        afternoon: { format: 'reel', title: 'Product Education' },
+        flex: { format: 'ugc', title: 'Member Content' },
+        evening: { format: 'reel', title: 'Member Journey' },
     },
     {
         name: 'Thursday',
-        morning: { format: 'image', title: 'Motivational Poster', detail: 'Encourage and uplift the community.' },
-        afternoon: { format: 'reel', title: 'Product Education', detail: 'Explain ingredients, usage or health tips.' },
-        evening: { format: 'image', title: 'How to Join Infographic', detail: 'Step-by-step guide to become a member.' },
+        morning: { format: 'reel', title: 'Office Chronicles' },
+        afternoon: { format: 'poster', title: 'Product FAQ' },
+        flex: { format: 'image', title: 'Customer Photo Review' },
+        evening: { format: 'poster', title: 'How to Join' },
     },
     {
         name: 'Friday',
-        morning: { format: 'reel', title: 'Relatable Reel', detail: 'Daily life, humor, or trending content.' },
-        afternoon: { format: 'image', title: 'Product Promo', detail: 'Highlight offers, bundles or special deals.' },
-        evening: { format: 'reel', title: 'Business Invitation Reel', detail: 'Share the opportunity and next steps.' },
+        morning: { format: 'reel', title: 'Trending Reel' },
+        afternoon: { format: 'poster', title: 'Product Promo' },
+        flex: { format: 'reel_poster', title: 'Member Recognition' },
+        evening: { format: 'reel', title: 'Business Invitation' },
     },
     {
         name: 'Saturday',
-        morning: { format: 'reel', title: 'Lifestyle Reel', detail: 'Family, travel, wellness, or everyday moments.' },
-        afternoon: { format: 'image', title: 'Member Testimonial', detail: 'Feature success stories and real experiences.' },
-        evening: { format: 'reel', title: 'Funny / Trending Reel', detail: 'Use trending sounds or popular topics.' },
+        morning: { format: 'image', title: 'Lifestyle Photo' },
+        afternoon: { format: 'reel', title: 'Member Testimonial' },
+        flex: { format: 'carousel', title: 'Event Coverage' },
+        evening: { format: 'poster', title: 'Bundle Offer' },
     },
     {
         name: 'Sunday',
-        morning: { format: 'image', title: 'Inspirational Poster', detail: 'Faith, hope, and a better tomorrow.' },
-        afternoon: { format: 'reel', title: 'Community Reel', detail: 'Show your team, events, or member activities.' },
-        evening: { format: 'image', title: 'Weekly Highlights', detail: 'Recap the week, upcoming plans, or key updates.' },
+        morning: { format: 'poster', title: 'Faith & Hope' },
+        afternoon: { format: 'reel', title: 'Community Reel' },
+        flex: { format: 'reel_poster', title: 'Ask Pr1me Z' },
+        evening: { format: 'reel', title: 'Member Success Story' },
     },
 ];
+
+/** Platforms with their own weekly plan. Only Facebook has one so far. */
+const platforms = [
+    { key: 'facebook', label: 'Facebook' },
+    { key: 'tiktok', label: 'TikTok' },
+    { key: 'instagram', label: 'Instagram' },
+    { key: 'youtube', label: 'YouTube' },
+] as const;
+
+type PlatformKey = (typeof platforms)[number]['key'];
 
 interface PlannedContent {
     id: number;
@@ -120,10 +135,10 @@ const SLOT_TIMES: Record<string, string> = {
 };
 
 const columns = [
-    { key: 'morning', label: 'Morning', time: '8:00 – 9:00 AM', purpose: 'Engage • Inspire • Start the Day', icon: Sun },
-    { key: 'afternoon', label: 'Afternoon', time: '12:00 – 1:00 PM', purpose: 'Educate • Showcase • Inform', icon: SunMedium },
-    { key: 'flex', label: 'Flex slot', time: '4:00 – 6:00 PM', purpose: 'Images • Videos • Any Category', icon: Megaphone },
-    { key: 'evening', label: 'Evening', time: '7:00 – 8:30 PM', purpose: 'Convert • Build Community', icon: Moon },
+    { key: 'morning', label: 'Morning', time: '8:00 – 9:00 AM', purpose: 'Engage • inspire', icon: Sun },
+    { key: 'afternoon', label: 'Afternoon', time: '12:00 – 1:00 PM', purpose: 'Educate • showcase', icon: SunMedium },
+    { key: 'flex', label: 'Flex', time: '4:00 – 6:00 PM', purpose: 'Proof • company life', icon: Megaphone },
+    { key: 'evening', label: 'Evening', time: '7:00 – 8:30 PM', purpose: 'Convert • community', icon: Moon },
 ] as const;
 
 export default function PostingSchedule({
@@ -153,8 +168,17 @@ export default function PostingSchedule({
         dayByKey,
     };
 
+    const requested = new URLSearchParams(usePage().url.split('?')[1] ?? '').get('platform');
+    const platform: PlatformKey = platforms.some((item) => item.key === requested) ? (requested as PlatformKey) : 'facebook';
+    const platformLabel = platforms.find((item) => item.key === platform)?.label ?? 'Facebook';
+
+    function visit(params: { week?: string; platform?: PlatformKey }) {
+        const next = { week: params.week ?? week.start, platform: params.platform ?? platform };
+        router.get('/posting-schedule', next.platform === 'facebook' ? { week: next.week } : next, { preserveScroll: true, preserveState: true });
+    }
+
     function goToWeek(date: string) {
-        router.get('/posting-schedule', { week: date }, { preserveScroll: true, preserveState: true });
+        visit({ week: date });
     }
 
     return (
@@ -163,12 +187,20 @@ export default function PostingSchedule({
             <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
                 <div className="border-b border-zinc-200 px-5 py-5">
                     <div className="text-center">
-                        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">Facebook Content Schedule</h1>
+                        <h1 className="text-xl font-semibold tracking-tight text-zinc-900 sm:text-2xl">{platformLabel} Content Schedule</h1>
                         <p className="mt-1 text-sm text-zinc-600">
-                            {canPost
-                                ? 'Tap + to compose for that day and time. Browse weeks to see what was scheduled or posted.'
-                                : '3 core posts per day + flexible company updates'}
+                            {platform !== 'facebook'
+                                ? `No ${platformLabel} posting plan yet.`
+                                : canPost
+                                    ? 'Tap + to compose for that day and time. Browse weeks to see what was scheduled or posted.'
+                                    : '4 posts per day: morning, afternoon, flex, and evening'}
                         </p>
+                        <label className="mt-3 inline-flex items-center gap-2 text-sm text-zinc-600">
+                            Platform
+                            <Select className="w-auto min-w-[9rem]" value={platform} onChange={(event) => visit({ platform: event.target.value as PlatformKey })} aria-label="Choose platform schedule">
+                                {platforms.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
+                            </Select>
+                        </label>
                     </div>
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                         <Button type="button" size="sm" variant="secondary" onClick={() => goToWeek(week.prev)} aria-label="Previous week">
@@ -189,13 +221,17 @@ export default function PostingSchedule({
                         </Button>
                     </div>
                 </div>
+                {platform !== 'facebook' ? (
+                    <EmptyPlatform label={platformLabel} />
+                ) : (
+                <>
                 <div className="hidden lg:block">
                     <div className="grid grid-cols-[7.5rem_repeat(4,minmax(0,1fr))]">
                         <div className="border-b border-zinc-200 bg-white px-3 py-4 text-center text-sm font-semibold text-zinc-900">Day</div>
                         {columns.map((column) => {
                             const Icon = column.icon;
                             return (
-                                <div key={column.key} className="border-b border-l border-zinc-200 bg-white px-3 py-3 text-center text-zinc-900">
+                                <div key={column.key} className={`border-b border-l border-zinc-200 px-3 py-3 text-center text-zinc-900 ${column.key === 'flex' ? 'bg-amber-100' : 'bg-white'}`}>
                                     <Icon className="mx-auto h-4 w-4" />
                                     <p className="text-sm font-semibold uppercase">{column.label}</p>
                                     <p className="text-xs font-medium text-zinc-600">{column.time}</p>
@@ -219,7 +255,7 @@ export default function PostingSchedule({
                                     </div>
                                     <Cell template={day.morning} weekday={weekday} dayDate={dayDate} slot="morning" current={current} {...cellProps} />
                                     <Cell template={day.afternoon} weekday={weekday} dayDate={dayDate} slot="afternoon" current={current} {...cellProps} />
-                                    <Cell template={flexSlot} weekday={weekday} dayDate={dayDate} slot="flex" current={current} {...cellProps} />
+                                    <Cell template={day.flex} weekday={weekday} dayDate={dayDate} slot="flex" current={current} {...cellProps} />
                                     <Cell template={day.evening} weekday={weekday} dayDate={dayDate} slot="evening" current={current} {...cellProps} />
                                 </div>
                             );
@@ -240,13 +276,15 @@ export default function PostingSchedule({
                                 <div className="mt-3 space-y-3">
                                     <MobileSlot label="Morning · 8:00 – 9:00 AM" template={day.morning} weekday={weekday} dayDate={dayDate} slot="morning" {...cellProps} />
                                     <MobileSlot label="Afternoon · 12:00 – 1:00 PM" template={day.afternoon} weekday={weekday} dayDate={dayDate} slot="afternoon" {...cellProps} />
-                                    <MobileSlot label="Flex slot · 4:00 – 6:00 PM" template={flexSlot} weekday={weekday} dayDate={dayDate} slot="flex" {...cellProps} />
+                                    <MobileSlot label="Flex · 4:00 – 6:00 PM" template={day.flex} weekday={weekday} dayDate={dayDate} slot="flex" {...cellProps} />
                                     <MobileSlot label="Evening · 7:00 – 8:30 PM" template={day.evening} weekday={weekday} dayDate={dayDate} slot="evening" {...cellProps} />
                                 </div>
                             </article>
                         );
                     })}
                 </div>
+                </>
+                )}
             </section>
             {canAssign && (
                 <AddContentModal
@@ -552,24 +590,41 @@ function AddContentModal({
     );
 }
 
+function EmptyPlatform({ label }: { label: string }) {
+    return (
+        <div className="px-5 py-16 text-center">
+            <CalendarClock className="mx-auto h-10 w-10 text-zinc-300" />
+            <p className="mt-3 font-semibold text-zinc-800">No {label} schedule yet</p>
+            <p className="mt-1 text-sm text-zinc-500">The weekly {label} posting plan will appear here once it's set up.</p>
+        </div>
+    );
+}
+
 function SlotBody({ slot, filled }: { slot: Slot; filled: boolean }) {
     return (
         <>
             <FormatBadge format={slot.format} filled={filled} />
-            <p className={`mt-2 text-sm font-semibold ${filled ? 'text-zinc-900' : 'text-zinc-500'}`}>{slot.title}</p>
-            <p className={`mt-1 text-xs leading-relaxed ${filled ? 'text-zinc-600' : 'text-zinc-400'}`}>{slot.detail}</p>
+            <p className={`mt-1 text-sm font-semibold ${filled ? 'text-zinc-900' : 'text-zinc-700'}`}>{slot.title}</p>
         </>
     );
 }
 
+const FORMAT_STYLES: Record<Format, { label: string; tone: string; icon: typeof ImageIcon }> = {
+    poster: { label: 'Poster', tone: 'text-brand-700', icon: ImageIcon },
+    reel: { label: 'Reel', tone: 'text-orange-700', icon: Clapperboard },
+    carousel: { label: 'Carousel', tone: 'text-brand-700', icon: GalleryHorizontal },
+    image: { label: 'Image', tone: 'text-brand-700', icon: ImageIcon },
+    reel_poster: { label: 'Reel / Poster', tone: 'text-brand-700', icon: Clapperboard },
+    ugc: { label: 'UGC Repost', tone: 'text-emerald-700', icon: Repeat2 },
+};
+
 function FormatBadge({ format, filled }: { format: Format; filled: boolean }) {
-    const tone = filled ? 'bg-brand-700 text-white' : 'bg-zinc-200 text-zinc-600';
-    const label = format === 'reel' ? 'Reels' : format === 'image' ? 'Image / Poster' : 'Company update';
-    const Icon = format === 'reel' ? Clapperboard : format === 'image' ? ImageIcon : Megaphone;
+    const style = FORMAT_STYLES[format];
+    const Icon = style.icon;
 
     return (
-        <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone}`}>
-            <Icon className="h-3 w-3" /> {label}
+        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide ${style.tone} ${filled ? '' : 'opacity-80'}`}>
+            <Icon className="h-3 w-3" /> {style.label}
         </span>
     );
 }
