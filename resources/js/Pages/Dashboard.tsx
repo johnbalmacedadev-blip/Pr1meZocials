@@ -2,24 +2,17 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { addMonths, eachDayOfInterval, endOfWeek, format, isSameMonth, isToday, parseISO, startOfWeek } from 'date-fns';
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Button, EmptyState, Modal, PageHeader, StatusBadge } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { cn, formatDate, visitFilters } from '@/lib/utils';
 import type { FormOptions, SharedProps } from '@/types';
 
-interface ChartRow { label: string; total: number; slug?: string; color?: string }
 interface Metrics {
     period: { from: string; to: string };
     kpis: Record<string, number>;
     on_time_rate: number | null;
     on_time_sample: number;
     average_turnaround_days: number | null;
-    by_status: ChartRow[];
-    by_platform: ChartRow[];
-    by_format: ChartRow[];
-    by_campaign: ChartRow[];
-    workload: ChartRow[];
     stale: { id: number; title: string; reference_number: string; updated_at: string | null; status: { name: string; slug: string; color: string } | null; owner: { name: string } | null; brand: { name: string } | null }[];
     tasks: { id: number; title: string; reference_number: string; deadline: string | null; role: string; status: { name: string; slug: string; color: string } | null; brand: { name: string } | null }[];
     performance: {
@@ -134,7 +127,16 @@ export default function Dashboard({ metrics, filters, options, schedule }: { met
                 <EmptyState title="No content in this view" body="Capture the first idea so the pipeline, calendar, and reports have something real to show." action={canCreate ? <Link className="text-sm font-medium text-brand-700" href="/content/create">Capture an idea</Link> : undefined} />
             ) : (
                 <>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {/* Phones: one compact 3-column panel so every count fits on screen. */}
+                    <div className="grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-zinc-200 bg-zinc-200 sm:hidden">
+                        {cards.map(([key, label]) => (
+                            <div key={key} className="flex flex-col justify-between bg-white px-2.5 py-2">
+                                <p className="text-[11px] leading-tight text-zinc-500">{label}</p>
+                                <p className={`text-lg font-semibold leading-snug ${key === 'overdue' && metrics.kpis[key] > 0 ? 'text-rose-700' : 'text-zinc-950'}`}>{metrics.kpis[key]}</p>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="hidden gap-3 sm:grid sm:grid-cols-2 xl:grid-cols-3">
                         {cards.map(([key, label]) => (
                             <div key={key} className="rounded-xl border border-zinc-200 bg-white p-4">
                                 <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</p>
@@ -142,24 +144,17 @@ export default function Dashboard({ metrics, filters, options, schedule }: { met
                             </div>
                         ))}
                     </div>
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                        <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">On-time completion</p>
-                            <p className="mt-2 text-3xl font-semibold">{metrics.on_time_rate === null ? '—' : `${metrics.on_time_rate}%`}</p>
-                            <p className="mt-1 text-sm text-zinc-500">{metrics.on_time_sample} published items in this period had a deadline. Published on or before that deadline counts as on time.</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2 sm:mt-4 sm:gap-3">
+                        <div className="rounded-xl border border-zinc-200 bg-white px-2.5 py-2 sm:p-4">
+                            <p className="text-[11px] leading-tight text-zinc-500 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wide">On-time completion</p>
+                            <p className="text-lg font-semibold sm:mt-2 sm:text-3xl">{metrics.on_time_rate === null ? '—' : `${metrics.on_time_rate}%`}</p>
+                            <p className="mt-1 hidden text-sm text-zinc-500 sm:block">{metrics.on_time_sample} published items in this period had a deadline. Published on or before that deadline counts as on time.</p>
                         </div>
-                        <div className="rounded-xl border border-zinc-200 bg-white p-4">
-                            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">Average production turnaround</p>
-                            <p className="mt-2 text-3xl font-semibold">{metrics.average_turnaround_days === null ? '—' : `${metrics.average_turnaround_days}d`}</p>
-                            <p className="mt-1 text-sm text-zinc-500">Mean days from idea capture to publication for items published in the selected period.</p>
+                        <div className="rounded-xl border border-zinc-200 bg-white px-2.5 py-2 sm:p-4">
+                            <p className="text-[11px] leading-tight text-zinc-500 sm:text-xs sm:font-medium sm:uppercase sm:tracking-wide">Avg. turnaround</p>
+                            <p className="text-lg font-semibold sm:mt-2 sm:text-3xl">{metrics.average_turnaround_days === null ? '—' : `${metrics.average_turnaround_days}d`}</p>
+                            <p className="mt-1 hidden text-sm text-zinc-500 sm:block">Mean days from idea capture to publication for items published in the selected period.</p>
                         </div>
-                    </div>
-                    <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                        <Chart title="Current work by status" rows={metrics.by_status} />
-                        <Chart title="Active workload by owner" rows={metrics.workload} />
-                        <Chart title="Ideas created in period by platform" rows={metrics.by_platform} />
-                        <Chart title="Ideas created in period by format" rows={metrics.by_format} />
-                        <Chart title="Ideas created in period by campaign" rows={metrics.by_campaign} />
                     </div>
                     <section className="mt-4 rounded-xl border border-zinc-200 bg-white p-4">
                         <h2 className="font-semibold">Waiting too long</h2>
@@ -259,25 +254,5 @@ function MonthSchedule({ schedule, filters }: { schedule: Schedule; filters: Rec
                 </div>
             </div>
         </div>
-    );
-}
-
-function Chart({ title, rows }: { title: string; rows: ChartRow[] }) {
-    return (
-        <section className="rounded-xl border border-zinc-200 bg-white p-4">
-            <h2 className="mb-3 font-semibold">{title}</h2>
-            {rows.length === 0 ? <p className="text-sm text-zinc-500">No records in this slice.</p> : (
-                <div className="h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={rows} layout="vertical" margin={{ left: 16, right: 8 }}>
-                            <XAxis type="number" allowDecimals={false} />
-                            <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 12 }} />
-                            <Tooltip />
-                            <Bar dataKey="total" fill="#284cb8" radius={4} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            )}
-        </section>
     );
 }
