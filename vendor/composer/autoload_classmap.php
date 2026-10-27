@@ -26,6 +26,7 @@ return array(
     'App\\Http\\Controllers\\EventController' => $baseDir . '/app/Http/Controllers/EventController.php',
     'App\\Http\\Controllers\\InspirationController' => $baseDir . '/app/Http/Controllers/InspirationController.php',
     'App\\Http\\Controllers\\LegalController' => $baseDir . '/app/Http/Controllers/LegalController.php',
+    'App\\Http\\Controllers\\MediaUploadController' => $baseDir . '/app/Http/Controllers/MediaUploadController.php',
     'App\\Http\\Controllers\\NotificationController' => $baseDir . '/app/Http/Controllers/NotificationController.php',
     'App\\Http\\Controllers\\NotificationPreferenceController' => $baseDir . '/app/Http/Controllers/NotificationPreferenceController.php',
     'App\\Http\\Controllers\\PerformanceController' => $baseDir . '/app/Http/Controllers/PerformanceController.php',

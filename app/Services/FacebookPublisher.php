@@ -453,23 +453,87 @@ class FacebookPublisher
         }
 
         $path = $this->absolutePathFor($item['path']);
-        $payload = [
-            'description' => (string) $post->caption,
+        $size = filesize($path);
+        $endpoint = '/'.$account->external_id.'/videos';
+
+        // Resumable upload: the file is streamed from disk in the pieces Facebook asks for,
+        // so large videos never have to fit in PHP memory or in a single request.
+        $start = $this->videoGraph()->asForm()->post($endpoint, [
+            'upload_phase' => 'start',
+            'file_size' => $size,
             'access_token' => $account->access_token,
-            ...$this->schedulePayload($scheduleAt),
-        ];
-
-        $response = $this->graph()
-            ->attach('source', file_get_contents($path), $item['name'] ?: 'video.mp4')
-            ->post('/'.$account->external_id.'/videos', $payload);
-
-        if (! $response->successful()) {
-            throw new RuntimeException($this->errorMessage($response->json()));
+        ]);
+        if (! $start->successful()) {
+            throw new RuntimeException($this->errorMessage($start->json()));
         }
 
-        $id = (string) data_get($response->json(), 'id');
+        $videoId = (string) data_get($start->json(), 'video_id');
+        $session = (string) data_get($start->json(), 'upload_session_id');
+        $from = (int) data_get($start->json(), 'start_offset', 0);
+        $to = (int) data_get($start->json(), 'end_offset', 0);
 
-        return ['id' => $id, 'permalink' => null];
+        $handle = fopen($path, 'rb');
+        if ($handle === false) {
+            throw new RuntimeException('Media file is missing.');
+        }
+
+        try {
+            while ($from < $to) {
+                fseek($handle, $from);
+                $chunk = (string) fread($handle, $to - $from);
+
+                $transfer = null;
+                foreach ([1, 2, 3] as $attempt) {
+                    $transfer = $this->videoGraph()
+                        ->attach('video_file_chunk', $chunk, 'chunk')
+                        ->post($endpoint, [
+                            'upload_phase' => 'transfer',
+                            'upload_session_id' => $session,
+                            'start_offset' => $from,
+                            'access_token' => $account->access_token,
+                        ]);
+                    if ($transfer->successful()) {
+                        break;
+                    }
+                    sleep($attempt);
+                }
+
+                if (! $transfer?->successful()) {
+                    throw new RuntimeException($this->errorMessage($transfer?->json()));
+                }
+
+                $from = (int) data_get($transfer->json(), 'start_offset', $to);
+                $to = (int) data_get($transfer->json(), 'end_offset', $from);
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        $finish = $this->videoGraph()->asForm()->post($endpoint, [
+            'upload_phase' => 'finish',
+            'upload_session_id' => $session,
+            'access_token' => $account->access_token,
+            'description' => (string) $post->caption,
+            ...$this->schedulePayload($scheduleAt),
+        ]);
+
+        if (! $finish->successful() || data_get($finish->json(), 'success') === false) {
+            throw new RuntimeException($this->errorMessage($finish->json()));
+        }
+
+        return ['id' => $videoId, 'permalink' => null];
+    }
+
+    /**
+     * Facebook asks for video uploads to go to its dedicated video host.
+     */
+    private function videoGraph(): PendingRequest
+    {
+        $version = config('facebook.graph_version', 'v21.0');
+
+        return Http::baseUrl('https://graph-video.facebook.com/'.$version)
+            ->acceptJson()
+            ->timeout(300);
     }
 
     /**

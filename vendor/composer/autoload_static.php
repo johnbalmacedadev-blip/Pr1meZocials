@@ -547,6 +547,7 @@ class ComposerStaticInitd8f67b824a1bf31c8999ead558d9b485
         'App\\Http\\Controllers\\EventController' => __DIR__ . '/../..' . '/app/Http/Controllers/EventController.php',
         'App\\Http\\Controllers\\InspirationController' => __DIR__ . '/../..' . '/app/Http/Controllers/InspirationController.php',
         'App\\Http\\Controllers\\LegalController' => __DIR__ . '/../..' . '/app/Http/Controllers/LegalController.php',
+        'App\\Http\\Controllers\\MediaUploadController' => __DIR__ . '/../..' . '/app/Http/Controllers/MediaUploadController.php',
         'App\\Http\\Controllers\\NotificationController' => __DIR__ . '/../..' . '/app/Http/Controllers/NotificationController.php',
         'App\\Http\\Controllers\\NotificationPreferenceController' => __DIR__ . '/../..' . '/app/Http/Controllers/NotificationPreferenceController.php',
         'App\\Http\\Controllers\\PerformanceController' => __DIR__ . '/../..' . '/app/Http/Controllers/PerformanceController.php',

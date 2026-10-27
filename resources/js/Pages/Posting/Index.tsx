@@ -5,6 +5,7 @@ import { EmojiPickerButton } from '@/Components/EmojiPicker';
 import FacebookGlyph from '@/Components/FacebookGlyph';
 import { Button, EmptyState, Field, Input, PageHeader, Select, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
+import { uploadInChunks } from '@/lib/chunkedUpload';
 import { confirmAction } from '@/lib/confirm';
 import { formatDate, withBase } from '@/lib/utils';
 import type { SharedProps } from '@/types';
@@ -12,7 +13,7 @@ import type { SharedProps } from '@/types';
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-m4v'];
 const MAX_IMAGE_BYTES = 80 * 1024 * 1024;
-const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 1024 * 1024 * 1024;
 const MAX_IMAGES = 10;
 
 function detectMediaType(file: File): 'image' | 'video' | null {
@@ -185,6 +186,7 @@ export default function PostingIndex({
         const max = new Date(Date.now() + 75 * 24 * 60 * 60 * 1000);
         return { min: toLocalInputValue(min), max: toLocalInputValue(max) };
     }, []);
+    const [videoProgress, setVideoProgress] = useState<number | null>(null);
     const fromSchedule = Boolean(composeDefaults?.return_to?.startsWith('/posting-schedule') || composeDefaults?.slot);
     const postForm = useForm({
         draft_id: '',
@@ -291,11 +293,31 @@ export default function PostingIndex({
         };
     }, [mediaFiles]);
 
-    function submitPost(event: FormEvent) {
+    async function submitPost(event: FormEvent) {
         event.preventDefault();
+        if (videoProgress !== null) return;
+
+        // Videos go up in small pieces first so no single request hits the server's size limit.
+        const video = postForm.data.media_type === 'video' ? postForm.data.media[0] : undefined;
+        let uploadId = '';
+        if (video) {
+            postForm.clearErrors();
+            setVideoProgress(0);
+            try {
+                uploadId = await uploadInChunks(video, basePath, setVideoProgress);
+            } catch (error) {
+                postForm.setError('media', error instanceof Error ? error.message : 'Video upload failed.');
+                setVideoProgress(null);
+                return;
+            }
+            setVideoProgress(100);
+        }
+
+        postForm.transform((data) => (uploadId ? { ...data, media: [], upload_id: uploadId } : data));
         postForm.post('/posting', {
             forceFormData: true,
             preserveScroll: true,
+            onFinish: () => setVideoProgress(null),
             onSuccess: () => {
                 if (postForm.data.return_to?.startsWith('/posting-schedule')) {
                     return;
@@ -429,7 +451,7 @@ export default function PostingIndex({
             }
             const video = list[0];
             if (video.size > MAX_VIDEO_BYTES) {
-                postForm.setError('media', 'Video must be 500MB or smaller.');
+                postForm.setError('media', 'Video must be 1 GB or smaller.');
                 return;
             }
             postForm.setData({ ...postForm.data, media_type: 'video', media: [video] });
@@ -771,8 +793,15 @@ export default function PostingIndex({
                                         )}
                                     </div>
                                 )}
-                                <Button type="submit" disabled={postForm.processing || !canSubmitMedia} className="w-full">
-                                    {postForm.processing
+                                {videoProgress !== null && videoProgress < 100 && (
+                                    <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuenow={videoProgress} aria-valuemin={0} aria-valuemax={100}>
+                                        <div className="h-full bg-brand-700 transition-[width]" style={{ width: `${videoProgress}%` }} />
+                                    </div>
+                                )}
+                                <Button type="submit" disabled={postForm.processing || videoProgress !== null || !canSubmitMedia} className="w-full">
+                                    {videoProgress !== null && videoProgress < 100
+                                        ? `Uploading video… ${videoProgress}%`
+                                        : postForm.processing
                                         ? (postForm.data.publish_mode === 'schedule'
                                             ? 'Scheduling on Facebook…'
                                             : postForm.data.also_post_tiktok

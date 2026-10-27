@@ -11,6 +11,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\InspirationController;
 use App\Http\Controllers\LegalController;
+use App\Http\Controllers\MediaUploadController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NotificationPreferenceController;
 use App\Http\Controllers\PerformanceController;
@@ -136,6 +137,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/posting', [SocialPostingController::class, 'index'])->name('posting.index');
     Route::post('/posting', [SocialPostingController::class, 'store'])->middleware('throttle:uploads')->name('posting.store');
+    Route::post('/posting/uploads', [MediaUploadController::class, 'start'])->middleware('throttle:uploads')->name('posting.uploads.start');
+    Route::post('/posting/uploads/{upload}/chunk', [MediaUploadController::class, 'chunk'])->middleware('throttle:1200,1')->name('posting.uploads.chunk');
+    Route::post('/posting/uploads/{upload}/finish', [MediaUploadController::class, 'finish'])->middleware('throttle:uploads')->name('posting.uploads.finish');
     Route::post('/posting/facebook/credentials', [SocialPostingController::class, 'saveMetaCredentials'])->name('posting.facebook.credentials');
     Route::get('/posting/facebook/redirect', [SocialPostingController::class, 'redirectToFacebook'])->name('posting.facebook.redirect');
     Route::get('/posting/facebook/callback', [SocialPostingController::class, 'handleFacebookCallback'])->name('posting.facebook.callback');

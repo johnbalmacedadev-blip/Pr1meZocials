@@ -4,6 +4,9 @@ return [
 
     'upload_max_kb' => (int) env('UPLOAD_MAX_KB', 512000),
 
+    // Compose videos are uploaded in chunks, so this is not limited by post_max_size.
+    'video_upload_max_mb' => (int) env('VIDEO_UPLOAD_MAX_MB', 1024),
+
     'allowed_uploads' => [
         'jpg' => ['image/jpeg'],
         'jpeg' => ['image/jpeg'],

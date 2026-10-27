@@ -516,6 +516,8 @@ class SocialPostingController extends Controller
                 'after:'.now()->addMinutes(9)->toDateTimeString(),
                 'before:'.now()->addDays(75)->toDateTimeString(),
             ],
+            // A video sent in chunks via /posting/uploads arrives as an upload id instead of a file.
+            'upload_id' => ['nullable', 'uuid'],
             'media' => ['nullable', 'array', 'max:10'],
             'media.*' => [
                 'required',
@@ -550,7 +552,14 @@ class SocialPostingController extends Controller
             abort_unless($request->user()->canAccessSocialAccount($draft->account->id), 403);
         }
 
-        if ($files === [] && $draft === null) {
+        $uploadId = $data['upload_id'] ?? null;
+        if ($uploadId && ($files !== [] || $data['media_type'] !== 'video')) {
+            throw ValidationException::withMessages([
+                'media' => 'Attach either one uploaded video or files, not both.',
+            ]);
+        }
+
+        if ($files === [] && $uploadId === null && $draft === null) {
             throw ValidationException::withMessages([
                 'media' => 'Attach at least one image or video.',
             ]);
@@ -586,7 +595,7 @@ class SocialPostingController extends Controller
             ? Carbon::parse($data['scheduled_publish_at'])
             : null;
 
-        if ($files !== []) {
+        if ($files !== [] || $uploadId !== null) {
             if ($draft) {
                 $oldPaths = array_column($draft->mediaItems(), 'path');
                 if ($oldPaths !== []) {
@@ -595,6 +604,9 @@ class SocialPostingController extends Controller
             }
 
             $mediaFiles = [];
+            if ($uploadId !== null) {
+                $mediaFiles[] = MediaUploadController::claim($request->user()->id, $uploadId);
+            }
             foreach ($files as $file) {
                 $mediaFiles[] = [
                     'path' => $file->store('social-posts/'.$request->user()->id, 'local'),
@@ -634,6 +646,12 @@ class SocialPostingController extends Controller
             $post = $draft->fresh();
         } else {
             $post = SocialPost::query()->create($attributes);
+        }
+
+        if ($data['media_type'] === 'video') {
+            // Large videos take a while to hand to Facebook; don't let PHP's time limit cut it off.
+            @set_time_limit(0);
+            ignore_user_abort(true);
         }
 
         try {
