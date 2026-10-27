@@ -7,9 +7,10 @@
 /storage/framework/install.lock
 /storage/logs/*.log
 /storage/app/facebook-credentials.json
-# Production .env is committed for pull-and-run shared hosting.
-# Keep machine-specific overrides in .env.local (copy over .env locally when developing).
+# Active .env is committed as LIVE for pull-and-run shared hosting.
+# Machine copies stay local — use switch-env.ps1 / env-local.bat / env-live.bat to flip.
 .env.local
+.env.live
 .env.backup
 .env.production.ready
 .phpactor.json

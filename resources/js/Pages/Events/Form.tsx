@@ -30,18 +30,26 @@ const WEEKDAYS = [
     { value: 7, label: 'Sunday' },
 ];
 
-export default function EventFormPage({ event, options }: { event: EventForm | null; options: FormOptions }) {
+export default function EventFormPage({
+    event,
+    defaults,
+    options,
+}: {
+    event: EventForm | null;
+    defaults?: { starts_on?: string | null; brand_id?: number | null; recurrence_weekdays?: number[] };
+    options: FormOptions;
+}) {
     const form = useForm({
-        brand_id: String(event?.brand_id ?? options.brands[0]?.id ?? ''),
+        brand_id: String(event?.brand_id ?? defaults?.brand_id ?? options.brands[0]?.id ?? ''),
         title: event?.title ?? '',
         description: event?.description ?? '',
         location: event?.location ?? '',
-        starts_on: event?.starts_on ?? '',
+        starts_on: event?.starts_on ?? defaults?.starts_on ?? '',
         ends_on: event?.ends_on ?? '',
         start_time: event?.start_time ?? '',
         end_time: event?.end_time ?? '',
         recurrence: event?.recurrence ?? 'none',
-        recurrence_weekdays: event?.recurrence_weekdays ?? [],
+        recurrence_weekdays: event?.recurrence_weekdays ?? defaults?.recurrence_weekdays ?? [],
         default_poster: null as File | null,
         default_video: null as File | null,
     });

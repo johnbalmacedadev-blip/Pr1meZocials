@@ -74,8 +74,24 @@ class EventController extends Controller
     {
         $this->authorize('create', Event::class);
 
+        $startsOn = null;
+        if ($request->filled('date')) {
+            try {
+                $startsOn = Carbon::parse($request->string('date')->toString())->toDateString();
+            } catch (\Throwable) {
+                $startsOn = null;
+            }
+        }
+
+        $weekday = $startsOn ? (int) Carbon::parse($startsOn)->isoWeekday() : null;
+
         return Inertia::render('Events/Form', [
             'event' => null,
+            'defaults' => [
+                'starts_on' => $startsOn,
+                'brand_id' => $request->filled('brand_id') ? $request->integer('brand_id') : null,
+                'recurrence_weekdays' => $weekday ? [$weekday] : [],
+            ],
             'options' => FormOptions::for($request->user()),
         ]);
     }

@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, parseISO, startOfMonth, startOfWeek } from 'date-fns';
+import { Plus } from 'lucide-react';
 import { EmptyState, PageHeader, Select } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import type { FormOptions } from '@/types';
@@ -87,8 +88,20 @@ export default function EventsIndex({
                     const key = format(day, 'yyyy-MM-dd');
                     const dayItems = occurrences.filter((item) => item.occurs_on === key);
                     return (
-                        <div key={key} className={`min-h-28 rounded-xl border p-2 ${isSameMonth(day, anchor) ? 'border-zinc-200 bg-white' : 'border-zinc-100 bg-zinc-50'}`}>
-                            <p className="text-xs font-medium text-zinc-500">{format(day, 'd')}</p>
+                        <div key={key} className={`group relative min-h-28 rounded-xl border p-2 ${isSameMonth(day, anchor) ? 'border-zinc-200 bg-white' : 'border-zinc-100 bg-zinc-50'}`}>
+                            <div className="flex items-start justify-between gap-1">
+                                <p className="text-xs font-medium text-zinc-500">{format(day, 'd')}</p>
+                                {canCreate && (
+                                    <Link
+                                        href={`/events/create?date=${key}${filters.brand_id ? `&brand_id=${filters.brand_id}` : ''}`}
+                                        className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-700 text-white opacity-100 shadow-sm transition hover:bg-brand-800 sm:opacity-0 sm:group-hover:opacity-100"
+                                        aria-label={`Add event on ${key}`}
+                                        title="Add event"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                                    </Link>
+                                )}
+                            </div>
                             <div className="mt-1 space-y-1">
                                 {dayItems.map((item) => (
                                     <Link
