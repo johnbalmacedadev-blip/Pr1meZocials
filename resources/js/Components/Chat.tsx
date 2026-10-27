@@ -1,0 +1,487 @@
+import { Link } from '@inertiajs/react';
+import {
+    ArrowLeft, CalendarHeart, ExternalLink, FolderOpen, Lightbulb, Megaphone, MessageCircle, Paperclip, Search, SendHorizontal, Sparkles, Users, X,
+} from 'lucide-react';
+import { FormEvent, KeyboardEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+    ChatAttachment, ChatConversation, ChatPerson, ChatThread, loadOlder, openChatWith, openConversation, searchAttachables, sendMessage, useChat,
+} from '@/lib/chat';
+import { cn } from '@/lib/utils';
+
+const typeIcons: Record<string, typeof Lightbulb> = {
+    content: Lightbulb,
+    event: CalendarHeart,
+    inspiration: Sparkles,
+    resource: FolderOpen,
+    campaign: Megaphone,
+};
+
+function initials(name: string) {
+    return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('');
+}
+
+function timeLabel(value?: string | null) {
+    if (!value) return '';
+    const date = new Date(value);
+    const now = new Date();
+    return date.toDateString() === now.toDateString()
+        ? date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function lastSeenLabel(person?: ChatPerson) {
+    if (!person) return '';
+    if (person.online) return 'Online';
+    if (!person.last_seen_at) return 'Offline';
+    return `Last seen ${timeLabel(person.last_seen_at)}`;
+}
+
+function seenLabel(thread: ChatThread, messageId: number) {
+    const readers = thread.readers.filter((reader) => (reader.last_read_message_id ?? 0) >= messageId);
+    if (readers.length === 0) return 'Sent';
+    if (thread.kind === 'direct') return 'Seen';
+    if (readers.length === thread.readers.length && readers.length > 1) return 'Seen by everyone';
+    const names = readers.map((reader) => reader.name.split(' ')[0]);
+    return `Seen by ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` +${names.length - 3}` : ''}`;
+}
+
+export function Avatar({ name, online, className }: { name: string; online?: boolean; className?: string }) {
+    return (
+        <span className={cn('relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700', className)}>
+            {initials(name)}
+            {online !== undefined && (
+                <span className={cn('absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-white', online ? 'bg-emerald-500' : 'bg-zinc-300')} />
+            )}
+        </span>
+    );
+}
+
+export function UnreadBadge({ count, className }: { count: number; className?: string }) {
+    if (count <= 0) return null;
+    return (
+        <span className={cn('grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1.5 text-[11px] font-semibold text-white', className)}>
+            {count > 99 ? '99+' : count}
+        </span>
+    );
+}
+
+/** Overlapping avatars of whoever is online right now. */
+export function OnlineStack({ max = 4 }: { max?: number }) {
+    const { people } = useChat();
+    const online = people.filter((person) => person.online);
+    if (online.length === 0) return null;
+    return (
+        <span className="flex -space-x-2" title={online.map((person) => person.name).join(', ')}>
+            {online.slice(0, max).map((person) => (
+                <Avatar key={person.id} name={person.name} online className="h-7 w-7 text-[10px] ring-2 ring-white" />
+            ))}
+            {online.length > max && (
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-zinc-100 text-[10px] font-semibold text-zinc-600 ring-2 ring-white">+{online.length - max}</span>
+            )}
+        </span>
+    );
+}
+
+export function ConversationList({ onOpen, activeId }: { onOpen: (id: number) => void; activeId?: number | null }) {
+    const { conversations, people, meId, ready } = useChat();
+    const online = useMemo(() => new Map(people.map((person) => [person.id, person.online])), [people]);
+    const direct = conversations.filter((conversation) => conversation.kind === 'direct');
+
+    if (ready && direct.length === 0) {
+        return <p className="px-4 py-8 text-center text-sm text-zinc-500">No direct messages yet. Pick someone under People to start one.</p>;
+    }
+
+    return (
+        <ul className="divide-y divide-zinc-100">
+            {direct.map((conversation: ChatConversation) => {
+                const unread = conversation.unread > 0;
+                return (
+                    <li key={conversation.id}>
+                        <button
+                            type="button"
+                            onClick={() => onOpen(conversation.id)}
+                            className={cn('flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50', activeId === conversation.id && 'bg-brand-50/60')}
+                        >
+                            <Avatar name={conversation.name} online={conversation.user ? online.get(conversation.user.id) ?? false : undefined} />
+                            <span className="min-w-0 flex-1">
+                                <span className="flex items-baseline justify-between gap-2">
+                                    <span className={cn('truncate text-sm', unread ? 'font-semibold text-zinc-950' : 'font-medium text-zinc-900')}>{conversation.name}</span>
+                                    <span className="shrink-0 text-[11px] text-zinc-400">{timeLabel(conversation.last_message?.created_at)}</span>
+                                </span>
+                                <span className="flex items-center justify-between gap-2">
+                                    <span className={cn('truncate text-xs', unread ? 'font-medium text-zinc-800' : 'text-zinc-500')}>
+                                        {conversation.last_message?.user_id === meId ? 'You: ' : ''}{conversation.last_message?.preview}
+                                    </span>
+                                    <UnreadBadge count={conversation.unread} />
+                                </span>
+                            </span>
+                        </button>
+                    </li>
+                );
+            })}
+        </ul>
+    );
+}
+
+export function PeopleList({ onOpen }: { onOpen: (conversationId: number) => void }) {
+    const { people, ready } = useChat();
+    const [query, setQuery] = useState('');
+    const [busy, setBusy] = useState<number | null>(null);
+    const filtered = people.filter((person) => person.name.toLowerCase().includes(query.trim().toLowerCase()));
+    const onlineCount = people.filter((person) => person.online).length;
+
+    async function start(person: ChatPerson) {
+        setBusy(person.id);
+        try {
+            onOpen(await openChatWith(person.id));
+        } finally {
+            setBusy(null);
+        }
+    }
+
+    return (
+        <div>
+            <div className="sticky top-0 z-10 bg-white px-4 py-2">
+                <div className="relative">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                    <input
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Find a teammate"
+                        className="w-full rounded-full border border-zinc-200 bg-zinc-50 py-1.5 pl-8 pr-3 text-sm outline-none focus:border-brand-700 focus:bg-white"
+                    />
+                </div>
+                <p className="mt-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-400">{onlineCount} online · tap someone to message them</p>
+            </div>
+            {ready && filtered.length === 0 && <p className="px-4 py-6 text-center text-sm text-zinc-500">No one matches.</p>}
+            <ul>
+                {filtered.map((person) => (
+                    <li key={person.id}>
+                        <button type="button" disabled={busy === person.id} onClick={() => void start(person)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-zinc-50 disabled:opacity-60">
+                            <Avatar name={person.name} online={person.online} />
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-medium text-zinc-900">{person.name}</span>
+                                <span className={cn('block truncate text-xs', person.online ? 'text-emerald-600' : 'text-zinc-500')}>
+                                    {person.online ? 'Online' : person.job_title || lastSeenLabel(person)}
+                                </span>
+                            </span>
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+function AttachmentCard({ attachment, mine }: { attachment: ChatAttachment; mine: boolean }) {
+    const Icon = typeIcons[attachment.type] ?? Paperclip;
+    const inner = (
+        <>
+            <span className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', mine ? 'bg-white/15 text-white' : 'bg-brand-50 text-brand-700')}>
+                <Icon className="h-4 w-4" />
+            </span>
+            <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{attachment.title}</span>
+                <span className={cn('block truncate text-xs', mine ? 'text-white/75' : 'text-zinc-500')}>{attachment.subtitle}</span>
+            </span>
+            {attachment.external && <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-70" />}
+        </>
+    );
+    const className = cn('mt-1 flex min-w-0 items-center gap-2.5 rounded-xl border p-2 transition', mine ? 'border-white/20 hover:bg-white/10' : 'border-zinc-200 bg-white hover:bg-zinc-50');
+
+    return attachment.external
+        ? <a href={attachment.url} target="_blank" rel="noreferrer noopener" className={className}>{inner}</a>
+        : <Link href={attachment.url} className={className}>{inner}</Link>;
+}
+
+function AttachmentPicker({ types, onPick, onClose }: { types: Record<string, string>; onPick: (item: ChatAttachment) => void; onClose: () => void }) {
+    const keys = Object.keys(types);
+    const [type, setType] = useState(keys[0] ?? '');
+    const [query, setQuery] = useState('');
+    const [items, setItems] = useState<ChatAttachment[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!type) return;
+        let cancelled = false;
+        setLoading(true);
+        const handle = setTimeout(() => {
+            searchAttachables(type, query)
+                .then((result) => { if (!cancelled) setItems(result); })
+                .catch(() => { if (!cancelled) setItems([]); })
+                .finally(() => { if (!cancelled) setLoading(false); });
+        }, 250);
+        return () => { cancelled = true; clearTimeout(handle); };
+    }, [type, query]);
+
+    return (
+        <div className="absolute inset-x-2 bottom-full z-20 mb-2 flex h-80 max-h-[60vh] flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-3 py-2">
+                <span className="text-sm font-semibold text-zinc-900">Share an item</span>
+                <button type="button" onClick={onClose} className="rounded-full p-1 text-zinc-500 hover:bg-zinc-100" aria-label="Close"><X className="h-4 w-4" /></button>
+            </div>
+            {keys.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-zinc-500">You don't have access to any items you can share.</p>
+            ) : (
+                <>
+                    <div className="flex gap-1 overflow-x-auto px-3 pt-2">
+                        {keys.map((key) => (
+                            <button key={key} type="button" onClick={() => setType(key)} className={cn('shrink-0 rounded-full px-2.5 py-1 text-xs', type === key ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200')}>
+                                {types[key]}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="px-3 py-2">
+                        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${types[type]?.toLowerCase() ?? ''}s`} className="w-full rounded-lg border border-zinc-200 px-2.5 py-1.5 text-sm outline-none focus:border-brand-700" />
+                    </div>
+                    <ul className="min-h-0 flex-1 overflow-auto pb-2">
+                        {loading && items.length === 0 && <li className="px-3 py-4 text-center text-xs text-zinc-500">Searching…</li>}
+                        {!loading && items.length === 0 && <li className="px-3 py-4 text-center text-xs text-zinc-500">Nothing found.</li>}
+                        {items.map((item) => {
+                            const Icon = typeIcons[item.type] ?? Paperclip;
+                            return (
+                                <li key={`${item.type}-${item.id}`}>
+                                    <button type="button" onClick={() => onPick(item)} className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-zinc-50">
+                                        <Icon className="h-4 w-4 shrink-0 text-brand-700" />
+                                        <span className="min-w-0">
+                                            <span className="block truncate text-sm text-zinc-900">{item.title}</span>
+                                            <span className="block truncate text-xs text-zinc-500">{item.subtitle}</span>
+                                        </span>
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </>
+            )}
+        </div>
+    );
+}
+
+function Composer() {
+    const { attachmentTypes, thread } = useChat();
+    const [body, setBody] = useState('');
+    const [attachment, setAttachment] = useState<ChatAttachment | null>(null);
+    const [picking, setPicking] = useState(false);
+    const [sending, setSending] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        setBody('');
+        setAttachment(null);
+        setPicking(false);
+        setError('');
+    }, [thread?.conversationId]);
+
+    async function submit(event?: FormEvent) {
+        event?.preventDefault();
+        if (sending || (!body.trim() && !attachment)) return;
+        setSending(true);
+        setError('');
+        try {
+            await sendMessage(body.trim(), attachment);
+            setBody('');
+            setAttachment(null);
+        } catch (exception) {
+            setError(exception instanceof Error ? exception.message : 'Message not sent.');
+        } finally {
+            setSending(false);
+        }
+    }
+
+    function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            void submit();
+        }
+    }
+
+    return (
+        <form onSubmit={submit} className="relative border-t border-zinc-100 bg-white p-2">
+            {picking && <AttachmentPicker types={attachmentTypes} onClose={() => setPicking(false)} onPick={(item) => { setAttachment(item); setPicking(false); }} />}
+            {attachment && (
+                <div className="mb-2 flex items-center gap-2 rounded-xl bg-brand-50 px-2.5 py-1.5 text-xs text-brand-800">
+                    <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate"><span className="font-semibold">{attachmentTypes[attachment.type] ?? 'Item'}:</span> {attachment.title}</span>
+                    <button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment" className="rounded-full p-0.5 hover:bg-brand-700/10"><X className="h-3.5 w-3.5" /></button>
+                </div>
+            )}
+            {error && <p className="mb-1.5 px-1 text-xs text-rose-600">{error}</p>}
+            <div className="flex items-end gap-1.5">
+                <button type="button" onClick={() => setPicking((open) => !open)} className={cn('rounded-full p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800', picking && 'bg-zinc-100 text-zinc-800')} aria-label="Share an item" title="Share a task, event, inspiration…">
+                    <Paperclip className="h-5 w-5" />
+                </button>
+                <textarea
+                    value={body}
+                    onChange={(event) => setBody(event.target.value)}
+                    onKeyDown={onKeyDown}
+                    rows={1}
+                    placeholder={thread?.kind === 'team' ? 'Message the whole team…' : 'Write a message…'}
+                    className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-brand-700 focus:bg-white"
+                />
+                <button type="submit" disabled={sending || (!body.trim() && !attachment)} className="rounded-full bg-brand-700 p-2.5 text-white hover:bg-brand-800 disabled:opacity-40" aria-label="Send">
+                    <SendHorizontal className="h-4 w-4" />
+                </button>
+            </div>
+        </form>
+    );
+}
+
+export function ChatThreadView({ onBack, actions, banner, className }: { onBack?: () => void; actions?: ReactNode; banner?: ReactNode; className?: string }) {
+    const { thread, meId, people } = useChat();
+    const scroller = useRef<HTMLDivElement>(null);
+    const stickToBottom = useRef(true);
+    const [loadingOlder, setLoadingOlder] = useState(false);
+    const isTeam = thread?.kind === 'team';
+    const person = people.find((item) => item.id === thread?.user?.id);
+    const onlineCount = people.filter((item) => item.online).length;
+    const messages = thread?.messages ?? [];
+    const lastMine = [...messages].reverse().find((message) => message.user_id === meId);
+
+    useLayoutEffect(() => {
+        const element = scroller.current;
+        if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
+    }, [messages.length, thread?.conversationId]);
+
+    useEffect(() => { stickToBottom.current = true; }, [thread?.conversationId]);
+
+    async function older() {
+        const element = scroller.current;
+        const before = element?.scrollHeight ?? 0;
+        setLoadingOlder(true);
+        stickToBottom.current = false;
+        try {
+            await loadOlder();
+        } finally {
+            setLoadingOlder(false);
+            requestAnimationFrame(() => { if (element) element.scrollTop = element.scrollHeight - before; });
+        }
+    }
+
+    if (!thread) return null;
+
+    return (
+        <div className={cn('flex min-h-0 flex-col', className)}>
+            <div className="flex items-center gap-2 border-b border-zinc-100 px-3 py-2.5">
+                {onBack && (
+                    <button type="button" onClick={onBack} className="rounded-full p-1.5 text-zinc-600 hover:bg-zinc-100" aria-label="Back">
+                        <ArrowLeft className="h-4 w-4" />
+                    </button>
+                )}
+                {isTeam ? (
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-700 text-white"><Users className="h-4 w-4" /></span>
+                ) : (
+                    <Avatar name={thread.name || '?'} online={person?.online ?? false} className="h-8 w-8" />
+                )}
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-zinc-950">{thread.name || 'Chat'}</p>
+                    {isTeam ? (
+                        <p className="truncate text-xs text-emerald-600">{onlineCount} online now</p>
+                    ) : (
+                        <p className={cn('truncate text-xs', person?.online ? 'text-emerald-600' : 'text-zinc-500')}>{lastSeenLabel(person)}</p>
+                    )}
+                </div>
+                {isTeam && <OnlineStack max={3} />}
+                {actions}
+            </div>
+            {banner}
+            <div
+                ref={scroller}
+                onScroll={(event) => {
+                    const element = event.currentTarget;
+                    stickToBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                }}
+                className="min-h-0 flex-1 space-y-1.5 overflow-y-auto bg-zinc-50/60 px-3 py-3"
+            >
+                {thread.hasMore && (
+                    <div className="pb-2 text-center">
+                        <button type="button" onClick={() => void older()} disabled={loadingOlder} className="rounded-full bg-white px-3 py-1 text-xs text-zinc-600 shadow-sm ring-1 ring-zinc-200 hover:bg-zinc-50">
+                            {loadingOlder ? 'Loading…' : 'Load earlier messages'}
+                        </button>
+                    </div>
+                )}
+                {!thread.loaded && <p className="py-8 text-center text-sm text-zinc-500">Loading…</p>}
+                {thread.loaded && messages.length === 0 && (
+                    <div className="py-10 text-center text-sm text-zinc-500">
+                        <MessageCircle className="mx-auto mb-2 h-8 w-8 text-zinc-300" />
+                        {isTeam ? 'Say hi to the whole team.' : `Say hi to ${thread.name || 'your teammate'}.`}
+                    </div>
+                )}
+                {messages.map((message, index) => {
+                    const mine = message.user_id === meId;
+                    const previous = messages[index - 1];
+                    const grouped = previous && previous.user_id === message.user_id
+                        && new Date(message.created_at).getTime() - new Date(previous.created_at).getTime() < 5 * 60 * 1000;
+                    return (
+                        <div key={message.id} className={cn('flex flex-col', mine ? 'items-end' : 'items-start', !grouped && index > 0 && 'pt-2')}>
+                            {isTeam && !mine && !grouped && (
+                                <span className="mb-0.5 px-1 text-[11px] font-medium text-zinc-600">{message.user_name ?? 'Former teammate'}</span>
+                            )}
+                            <div className={cn('max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm', mine ? 'rounded-br-md bg-brand-700 text-white' : 'rounded-bl-md bg-white text-zinc-900 ring-1 ring-zinc-200')}>
+                                {message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>}
+                                {message.attachment && <AttachmentCard attachment={message.attachment} mine={mine} />}
+                            </div>
+                            {!grouped && <span className="mt-0.5 px-1 text-[10px] text-zinc-400">{timeLabel(message.created_at)}</span>}
+                            {lastMine?.id === message.id && (
+                                <span className="px-1 text-[10px] font-medium text-zinc-500">{seenLabel(thread, message.id)}</span>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+            <Composer />
+        </div>
+    );
+}
+
+/** Floating chat bubble pinned bottom-right; opens straight into the team group chat. */
+export function ChatWidget() {
+    const { unreadTotal, conversations, teamId, thread } = useChat();
+    const [open, setOpen] = useState(false);
+    const directUnread = conversations.filter((item) => item.kind === 'direct').reduce((sum, item) => sum + item.unread, 0);
+
+    // Only treat the team chat as being read while the panel actually shows it.
+    useEffect(() => {
+        if (open && teamId && thread?.conversationId !== teamId) openConversation(teamId);
+    }, [open, teamId, thread?.conversationId]);
+    useEffect(() => () => openConversation(null), []);
+
+    function close() {
+        setOpen(false);
+        openConversation(null);
+    }
+
+    return (
+        <>
+            {open && (
+                <div className="fixed bottom-[calc(9rem+env(safe-area-inset-bottom))] right-3 z-50 flex h-[min(34rem,calc(100vh-11rem))] w-[calc(100vw-1.5rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl lg:bottom-20 lg:right-5">
+                    {thread && thread.conversationId === teamId ? (
+                        <ChatThreadView
+                            className="h-full"
+                            actions={(
+                                <button type="button" onClick={close} className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-100" aria-label="Close chat"><X className="h-4 w-4" /></button>
+                            )}
+                            banner={(
+                                <Link href="/messenger?tab=direct" onClick={close} className={cn('flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-1.5 text-xs', directUnread > 0 ? 'bg-brand-50 font-medium text-brand-800' : 'text-zinc-500 hover:bg-zinc-50')}>
+                                    <span>{directUnread > 0 ? `${directUnread} new direct message${directUnread === 1 ? '' : 's'}` : 'Direct messages and people'}</span>
+                                    <span className="font-medium text-brand-700">Open Messenger →</span>
+                                </Link>
+                            )}
+                        />
+                    ) : (
+                        <p className="grid h-full place-items-center text-sm text-zinc-500">Loading team chat…</p>
+                    )}
+                </div>
+            )}
+            <button
+                type="button"
+                onClick={() => (open ? close() : setOpen(true))}
+                className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-3 z-50 grid h-12 w-12 place-items-center rounded-full bg-brand-700 text-white shadow-lg shadow-brand-700/30 transition hover:bg-brand-800 active:scale-95 lg:bottom-5 lg:right-5"
+                aria-label={open ? 'Close team chat' : 'Open team chat'}
+            >
+                {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
+                {!open && <UnreadBadge count={unreadTotal} className="absolute -right-1 -top-1 ring-2 ring-white" />}
+            </button>
+        </>
+    );
+}

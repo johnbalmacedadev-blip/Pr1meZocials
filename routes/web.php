@@ -4,6 +4,7 @@ use App\Http\Controllers\AssetController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CampaignController;
+use App\Http\Controllers\ChatController;
 use App\Http\Controllers\ContentItemController;
 use App\Http\Controllers\ContentWorkflowController;
 use App\Http\Controllers\DashboardController;
@@ -182,4 +183,11 @@ Route::middleware('auth')->group(function () {
     Route::put('/profile/password', [ProfileController::class, 'password'])->name('profile.password');
     Route::put('/notification-preferences', [NotificationPreferenceController::class, 'update'])->name('notification-preferences.update');
     Route::post('/notification-preferences/test', [NotificationPreferenceController::class, 'test'])->middleware('throttle:6,1')->name('notification-preferences.test');
+
+    Route::get('/messenger', [ChatController::class, 'index'])->name('messenger');
+    Route::post('/chat/sync', [ChatController::class, 'sync'])->middleware('throttle:120,1')->name('chat.sync');
+    Route::post('/chat/direct/{user}', [ChatController::class, 'direct'])->name('chat.direct');
+    Route::post('/chat/conversations/{conversation}/messages', [ChatController::class, 'store'])->middleware('throttle:60,1')->name('chat.messages.store');
+    Route::get('/chat/conversations/{conversation}/messages', [ChatController::class, 'older'])->name('chat.messages.older');
+    Route::get('/chat/attachables', [ChatController::class, 'attachables'])->name('chat.attachables');
 });

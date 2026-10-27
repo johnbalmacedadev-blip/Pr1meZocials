@@ -1,12 +1,14 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import {
-    BarChart3, Bell, CalendarDays, CalendarHeart, Columns3, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, MoreHorizontal, Plus, Search, Send, Settings, Sparkles, CalendarRange,
+    BarChart3, Bell, CalendarDays, CalendarHeart, Columns3, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, MessageCircle, MoreHorizontal, Plus, Search, Send, Settings, Sparkles, CalendarRange,
     UserRound, Users, X,
 } from 'lucide-react';
 import { FormEvent, ReactNode, useMemo, useState } from 'react';
+import { ChatWidget, UnreadBadge } from '@/Components/Chat';
 import { Logo } from '@/Components/Logo';
 import { Button } from '@/Components/ui';
+import { configureChat, useChat } from '@/lib/chat';
 import { cn, formatDate } from '@/lib/utils';
 import type { SharedProps } from '@/types';
 
@@ -23,6 +25,7 @@ const nav = [
     { href: '/campaigns', label: 'Campaigns', icon: Megaphone, show: (can: Can) => can('campaigns.view') },
     { href: '/team', label: 'Team', icon: Users, show: (can: Can) => can('team.view') },
     { href: '/performance', label: 'Performance', icon: BarChart3, show: (can: Can) => can('performance.view') || can('reports.view') },
+    { href: '/messenger', label: 'Messenger', icon: MessageCircle, show: () => true },
     { href: '/settings', label: 'Settings', icon: Settings, show: (can: Can) => can('settings.view') || can('settings.update') || can('settings.manage') || can('brands.manage') || can('users.manage') || can('taxonomy.manage') || can('tags.manage') || can('platforms.manage') || can('workflow.manage') },
 ];
 
@@ -43,7 +46,9 @@ function pathIsActive(current: string, href: string): boolean {
 
 export default function AppLayout({ title, children }: { title?: string; children: ReactNode }) {
     const page = usePage<SharedProps>();
-    const { auth, flash, unreadNotifications, recentNotifications } = page.props;
+    const { auth, flash, unreadNotifications, recentNotifications, basePath = '' } = page.props;
+    configureChat(basePath);
+    const { unreadTotal: unreadChats } = useChat();
     const permissions = auth.user?.permissions ?? [];
     const can = (permission: string) => permissions.includes(permission);
     const [open, setOpen] = useState(false);
@@ -105,6 +110,7 @@ export default function AppLayout({ title, children }: { title?: string; childre
                     >
                         <Icon className="h-4 w-4" />
                         {item.label}
+                        {item.href === '/messenger' && <UnreadBadge count={unreadChats} className="ml-auto" />}
                     </Link>
                 );
             })}
@@ -274,6 +280,8 @@ export default function AppLayout({ title, children }: { title?: string; childre
                     })}
                 </ul>
             </nav>
+
+            {!pathIsActive(current, '/messenger') && <ChatWidget />}
 
             {open && (
                 <div className="fixed inset-0 z-50 lg:hidden">
