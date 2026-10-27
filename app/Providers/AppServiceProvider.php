@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Services\WebPushService;
 use App\Support\EnsureProductionReady;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -15,7 +16,8 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        // One instance per request so queued pushes are flushed together after the response.
+        $this->app->singleton(WebPushService::class);
     }
 
     public function boot(): void

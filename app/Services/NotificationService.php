@@ -13,6 +13,8 @@ use Throwable;
 
 class NotificationService
 {
+    public function __construct(private WebPushService $push) {}
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -44,6 +46,13 @@ class NotificationService
             // Send once the surrounding transaction commits so a rollback never emails.
             DB::afterCommit(fn () => $this->email($recipient, $title, $body, $data));
         }
+
+        DB::afterCommit(fn () => $this->push->queue([$recipient->id], [
+            'title' => $title,
+            'body' => $body,
+            'url' => $this->linkFor($data)[0],
+            'tag' => 'notification-'.$notification->id,
+        ]));
 
         return $notification;
     }
@@ -94,16 +103,27 @@ class NotificationService
     }
 
     /**
+     * Where a notification points: [url, button label].
+     *
      * @param  array<string, mixed>  $data
+     * @return array{0: string, 1: string}
      */
-    private function mailable(User $recipient, string $title, string $body, array $data): NotificationMail
+    private function linkFor(array $data): array
     {
-        [$url, $label] = match (true) {
+        return match (true) {
             isset($data['content_id']) => [route('content.show', $data['content_id']), 'Open task'],
             isset($data['event_id']) => [route('events.show', $data['event_id']), 'Open event'],
             ! empty($data['permalink_url']) => [(string) $data['permalink_url'], 'View post'],
             default => [route('notifications.index'), 'Open notifications'],
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function mailable(User $recipient, string $title, string $body, array $data): NotificationMail
+    {
+        [$url, $label] = $this->linkFor($data);
 
         return new NotificationMail(
             $title,

@@ -4,6 +4,8 @@ import { ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { Preloader } from '@/Components/Preloader';
+// Side effect: catch the browser's install prompt as early as possible.
+import '@/lib/pwa';
 
 const pages = import.meta.glob('./Pages/**/*.tsx');
 

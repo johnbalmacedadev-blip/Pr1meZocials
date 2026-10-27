@@ -18,6 +18,7 @@ use App\Http\Controllers\PlatformVersionController;
 use App\Http\Controllers\PostingScheduleController;
 use App\Http\Controllers\SocialPostingController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PwaController;
 use App\Http\Controllers\ResourceLinkController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\SavedViewController;
@@ -27,6 +28,10 @@ use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInviteController;
 use App\Http\Controllers\TaskNoteController;
 use Illuminate\Support\Facades\Route;
+
+// Installable app files: public so the browser can fetch them before sign-in.
+Route::get('/manifest.webmanifest', [PwaController::class, 'manifest'])->name('pwa.manifest');
+Route::get('/sw.js', [PwaController::class, 'serviceWorker'])->name('pwa.worker');
 
 Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
 Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
@@ -190,4 +195,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/chat/conversations/{conversation}/messages', [ChatController::class, 'store'])->middleware('throttle:60,1')->name('chat.messages.store');
     Route::get('/chat/conversations/{conversation}/messages', [ChatController::class, 'older'])->name('chat.messages.older');
     Route::get('/chat/attachables', [ChatController::class, 'attachables'])->name('chat.attachables');
+
+    Route::get('/push/key', [PwaController::class, 'key'])->name('push.key');
+    Route::post('/push/subscriptions', [PwaController::class, 'subscribe'])->middleware('throttle:30,1')->name('push.subscribe');
+    Route::post('/push/subscriptions/delete', [PwaController::class, 'unsubscribe'])->name('push.unsubscribe');
+    Route::post('/push/test', [PwaController::class, 'test'])->middleware('throttle:6,1')->name('push.test');
 });

@@ -1,1 +1,0 @@
-import{u as t,j as n,k as e}from"./app-C4eVEiXz.js";function p({className:o,variant:s="full"}){const{basePath:r=""}=t().props,a=s==="mark";return n.jsx("img",{src:`${r}/brand/${a?"primez-z.png":"primez-logo.png"}`,alt:"pr1meZ",className:e(a?"h-8 w-8 object-contain":"h-9 w-auto",o)})}export{p as L};

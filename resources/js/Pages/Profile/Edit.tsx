@@ -1,6 +1,7 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
 import { FormEvent } from 'react';
 import EmailNotificationSettings, { EmailNotificationProps } from '@/Components/EmailNotificationSettings';
+import { PushSettings } from '@/Components/Pwa';
 import { Button, Field, Input, PageHeader } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import type { SharedProps } from '@/types';
@@ -36,6 +37,7 @@ export default function ProfileEdit({ profile, emailNotifications }: { profile: 
                 <Field label="Confirm password"><Input type="password" value={passwordForm.data.password_confirmation} onChange={(event) => passwordForm.setData('password_confirmation', event.target.value)} /></Field>
                 <Button type="submit" disabled={passwordForm.processing}>Update password</Button>
             </form>
+            <div className="mb-4"><PushSettings /></div>
             <EmailNotificationSettings {...emailNotifications} />
         </AppLayout>
     );

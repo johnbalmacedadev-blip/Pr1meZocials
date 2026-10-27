@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
+use App\Services\WebPushService;
 use App\Support\ChatAttachments;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -83,7 +85,7 @@ class ChatController extends Controller
         return response()->json(['conversation_id' => $conversation->id]);
     }
 
-    public function store(Request $request, ChatConversation $conversation): JsonResponse
+    public function store(Request $request, ChatConversation $conversation, WebPushService $push): JsonResponse
     {
         $user = $request->user();
         $conversation->ensureTeamMember($user);
@@ -123,6 +125,22 @@ class ChatController extends Controller
         });
 
         $this->touchPresence($user);
+
+        // Phone/browser push for everyone else in the conversation, sent after the response.
+        $recipients = $conversation->participants()
+            ->where('users.is_active', true)
+            ->whereKeyNot($user->id)
+            ->pluck('users.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        $push->queue($recipients, [
+            'title' => $conversation->isTeam() ? $user->name.' · Team chat' : $user->name,
+            'body' => Str::limit($body !== '' ? $body : 'Shared: '.($attachment['title'] ?? 'an item'), 160),
+            'url' => $conversation->isTeam()
+                ? route('messenger')
+                : route('messenger', ['tab' => 'direct', 'conversation' => $conversation->id]),
+            'tag' => 'chat-'.$conversation->id,
+        ]);
 
         return response()->json(['message' => $message->load('user:id,name')->toPayload()]);
     }

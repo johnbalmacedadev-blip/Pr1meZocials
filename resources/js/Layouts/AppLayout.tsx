@@ -4,11 +4,13 @@ import {
     BarChart3, Bell, CalendarDays, CalendarHeart, Columns3, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, MessageCircle, MoreHorizontal, Plus, Search, Send, Settings, Sparkles, CalendarRange,
     UserRound, Users, X,
 } from 'lucide-react';
-import { FormEvent, ReactNode, useMemo, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
 import { ChatWidget, UnreadBadge } from '@/Components/Chat';
 import { Logo } from '@/Components/Logo';
+import { InstallAppButton, PushBanner } from '@/Components/Pwa';
 import { Button } from '@/Components/ui';
 import { configureChat, useChat } from '@/lib/chat';
+import { startPwa } from '@/lib/pwa';
 import { cn, formatDate } from '@/lib/utils';
 import type { SharedProps } from '@/types';
 
@@ -49,6 +51,7 @@ export default function AppLayout({ title, children }: { title?: string; childre
     const { auth, flash, unreadNotifications, recentNotifications, basePath = '' } = page.props;
     configureChat(basePath);
     const { unreadTotal: unreadChats } = useChat();
+    useEffect(() => { void startPwa(basePath); }, [basePath]);
     const permissions = auth.user?.permissions ?? [];
     const can = (permission: string) => permissions.includes(permission);
     const [open, setOpen] = useState(false);
@@ -125,6 +128,7 @@ export default function AppLayout({ title, children }: { title?: string; childre
                     <span className="mt-2 block text-xs text-zinc-400">Creative operations</span>
                 </Link>
                 {links}
+                <InstallAppButton className="mt-1" />
                 {can('content.create') && (
                     <Link href="/content/create" className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-700 px-3 py-2 text-sm font-medium text-white hover:bg-brand-800">
                         <Plus className="h-4 w-4" /> New idea
@@ -208,6 +212,8 @@ export default function AppLayout({ title, children }: { title?: string; childre
                         </Dropdown.Root>
                     </div>
                 </header>
+
+                <PushBanner />
 
                 {(flash.success || flash.error) && (
                     <div className={cn('mx-3 mt-3 rounded-2xl px-4 py-3 text-sm lg:mx-4 lg:mt-4', flash.error ? 'bg-rose-50 text-rose-900' : 'bg-emerald-50 text-emerald-900')}>
@@ -298,6 +304,7 @@ export default function AppLayout({ title, children }: { title?: string; childre
                             </button>
                         </div>
                         {links}
+                        <InstallAppButton className="mt-1" onOpen={() => setOpen(false)} />
                         {can('content.create') && (
                             <Button className="mt-4 w-full" onClick={() => { setOpen(false); router.visit('/content/create'); }}>
                                 <Plus className="h-4 w-4" /> New idea

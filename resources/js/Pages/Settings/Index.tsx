@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import EmailNotificationSettings, { EmailNotificationProps } from '@/Components/EmailNotificationSettings';
 import PlatformIcon from '@/Components/PlatformIcon';
+import { PushSettings } from '@/Components/Pwa';
 import { Button, Field, Input, PageHeader, Select, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
@@ -87,7 +88,7 @@ export default function Settings({ section, emailNotifications, users, roles, br
                 ))}
             </div>
             {section === 'general' && abilities.settings && <GeneralForm settings={settings} />}
-            {section === 'notifications' && <EmailNotificationSettings {...emailNotifications} />}
+            {section === 'notifications' && <div className="space-y-4"><PushSettings /><EmailNotificationSettings {...emailNotifications} /></div>}
             {section === 'users' && <UsersSection users={users} roles={roles} brands={brands} facebookPages={facebookPages} invites={invites} canManage={abilities.users} />}
             {section === 'brands' && <BrandsSection brands={brands} canManage={abilities.brands} />}
             {section === 'platforms' && abilities.platforms && <PlatformsSection platforms={platforms} />}
