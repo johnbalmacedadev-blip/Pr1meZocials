@@ -1,10 +1,10 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { Trash2 } from 'lucide-react';
+import { ChevronDown, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Button, EmptyState, PageHeader, Pagination, PriorityBadge, StatusBadge } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
-import { formatDate, visitFilters } from '@/lib/utils';
+import { cn, formatDate, visitFilters } from '@/lib/utils';
 import type { ContentSummary, FormOptions, Paginator, SharedProps } from '@/types';
 
 const presets = [
@@ -49,6 +49,7 @@ export default function Index({
         setSelected((current) => current.filter((id) => content.data.some((item) => item.id === id)));
     }, [content.data]);
 
+    const activeFilters = Object.entries(filters ?? {}).filter(([key, value]) => key !== 'page' && value !== '' && value !== null).length;
     const allSelected = deletableIds.length > 0 && deletableIds.every((id) => selected.includes(id));
     const someSelected = selected.length > 0;
 
@@ -108,30 +109,41 @@ export default function Index({
                 <Link href="/board" className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm">Production board</Link>
                 <Link href="/calendar" className="shrink-0 rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm">Publishing calendar</Link>
             </div>
-            <form onSubmit={submitFilters} className="mb-4 grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 md:grid-cols-4">
-                <input name="q" defaultValue={filters.q ?? ''} placeholder="Search title or reference" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2" />
-                <select name="brand_id" defaultValue={filters.brand_id ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All brands</option>{options.brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select>
-                <select name="status" defaultValue={filters.status ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All statuses</option>{lookups?.statuses.map((status) => <option key={status.slug} value={status.slug}>{status.name}</option>)}</select>
-                <select name="format" defaultValue={filters.format ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All formats</option>{lookups?.formats.map((format) => <option key={format.value} value={format.value}>{format.label}</option>)}</select>
-                <select name="platform_id" defaultValue={filters.platform_id ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All platforms</option>{lookups?.platforms.map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}</select>
-                <select name="owner_id" defaultValue={filters.owner_id ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All owners</option>{options.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
-                <select name="priority" defaultValue={filters.priority ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All priorities</option>{lookups?.priorities.map((priority) => <option key={priority.value} value={priority.value}>{priority.label}</option>)}</select>
-                <select name="distribution" defaultValue={filters.distribution ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">Organic or paid</option>{lookups?.distributions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-                <select name="funnel_stage" defaultValue={filters.funnel_stage ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All funnel stages</option>{lookups?.funnel_stages.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
-                <select name="pillar_id" defaultValue={filters.pillar_id ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All pillars</option>{options.pillars.map((pillar) => <option key={pillar.id} value={pillar.id}>{pillar.name}</option>)}</select>
-                <input type="date" name="deadline_from" defaultValue={filters.deadline_from ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" aria-label="Deadline from" />
-                <div className="flex gap-2 md:col-span-2">
-                    <button className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-white" type="submit">Filter</button>
-                    {permissions.includes('content.export') && <a className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" href={`/content/export?${new URLSearchParams(filters).toString()}`}>Export CSV</a>}
+            <details className="group mb-4 rounded-xl border border-zinc-200 bg-white">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-zinc-900 [&::-webkit-details-marker]:hidden">
+                    <span className="flex items-center gap-2">
+                        <SlidersHorizontal className="h-4 w-4 text-zinc-500" /> Filters
+                        {activeFilters > 0 && <span className="rounded-full bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-800">{activeFilters} on</span>}
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-zinc-500 transition group-open:rotate-180" />
+                </summary>
+                <div className="space-y-3 border-t border-zinc-100 p-4">
+                    <form onSubmit={submitFilters} className="grid gap-3 md:grid-cols-4">
+                        <input name="q" defaultValue={filters.q ?? ''} placeholder="Search title or reference" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm md:col-span-2" />
+                        <select name="brand_id" defaultValue={filters.brand_id ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All brands</option>{options.brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}</select>
+                        <select name="status" defaultValue={filters.status ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All statuses</option>{lookups?.statuses.map((status) => <option key={status.slug} value={status.slug}>{status.name}</option>)}</select>
+                        <select name="format" defaultValue={filters.format ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All formats</option>{lookups?.formats.map((format) => <option key={format.value} value={format.value}>{format.label}</option>)}</select>
+                        <select name="platform_id" defaultValue={filters.platform_id ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All platforms</option>{lookups?.platforms.map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}</select>
+                        <select name="owner_id" defaultValue={filters.owner_id ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All owners</option>{options.people.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select>
+                        <select name="priority" defaultValue={filters.priority ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All priorities</option>{lookups?.priorities.map((priority) => <option key={priority.value} value={priority.value}>{priority.label}</option>)}</select>
+                        <select name="distribution" defaultValue={filters.distribution ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">Organic or paid</option>{lookups?.distributions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+                        <select name="funnel_stage" defaultValue={filters.funnel_stage ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All funnel stages</option>{lookups?.funnel_stages.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+                        <select name="pillar_id" defaultValue={filters.pillar_id ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm"><option value="">All pillars</option>{options.pillars.map((pillar) => <option key={pillar.id} value={pillar.id}>{pillar.name}</option>)}</select>
+                        <input type="date" name="deadline_from" defaultValue={filters.deadline_from ?? ''} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" aria-label="Deadline from" />
+                        <div className="flex gap-2 md:col-span-2">
+                            <button className="rounded-lg bg-zinc-900 px-3 py-2 text-sm text-white" type="submit">Filter</button>
+                            {permissions.includes('content.export') && <a className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" href={`/content/export?${new URLSearchParams(filters).toString()}`}>Export CSV</a>}
+                        </div>
+                    </form>
+                    <form onSubmit={(event) => { event.preventDefault(); save.post('/saved-views'); }} className="flex flex-wrap gap-2">
+                        <input value={save.data.name} onChange={(event) => save.setData('name', event.target.value)} placeholder="Name this filter" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
+                        <button className="rounded-lg border border-zinc-300 bg-white px-3 text-sm" type="submit">Save view</button>
+                        {savedViews.map((view) => (
+                            <Link key={view.id} href={`/content?${new URLSearchParams(view.filters).toString()}`} className="rounded-full bg-zinc-200 px-3 py-2 text-sm">{view.name}</Link>
+                        ))}
+                    </form>
                 </div>
-            </form>
-            <form onSubmit={(event) => { event.preventDefault(); save.post('/saved-views'); }} className="mb-4 flex gap-2">
-                <input value={save.data.name} onChange={(event) => save.setData('name', event.target.value)} placeholder="Name this filter" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm" />
-                <button className="rounded-lg border border-zinc-300 bg-white px-3 text-sm" type="submit">Save view</button>
-                {savedViews.map((view) => (
-                    <Link key={view.id} href={`/content?${new URLSearchParams(view.filters).toString()}`} className="rounded-full bg-zinc-200 px-3 py-2 text-sm">{view.name}</Link>
-                ))}
-            </form>
+            </details>
 
             {canDelete && content.data.length > 0 && (
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2.5">
@@ -152,9 +164,10 @@ export default function Index({
                         size="sm"
                         disabled={!someSelected || deleting}
                         onClick={deleteSelected}
+                        aria-label={isTrash ? 'Delete selected forever' : 'Delete selected'}
+                        title={isTrash ? 'Delete selected forever' : 'Delete selected'}
                     >
-                        <Trash2 className="h-4 w-4" />
-                        {deleting ? 'Deleting…' : isTrash ? 'Delete forever' : 'Delete selected'}
+                        <Trash2 className={cn('h-4 w-4', deleting && 'animate-pulse')} />
                     </Button>
                 </div>
             )}

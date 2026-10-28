@@ -114,6 +114,7 @@ class NotificationService
             isset($data['content_id']) => [route('content.show', $data['content_id']), 'Open task'],
             isset($data['event_id']) => [route('events.show', $data['event_id']), 'Open event'],
             ! empty($data['permalink_url']) => [(string) $data['permalink_url'], 'View post'],
+            ! empty($data['url']) => [(string) $data['url'], 'Open chat'],
             default => [route('notifications.index'), 'Open notifications'],
         };
     }

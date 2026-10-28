@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     ArrowLeft, CalendarHeart, ExternalLink, FolderOpen, Lightbulb, Megaphone, MessageCircle, Paperclip, Search, SendHorizontal, Sparkles, Users, X,
 } from 'lucide-react';
@@ -7,6 +7,7 @@ import {
     ChatAttachment, ChatConversation, ChatPerson, ChatThread, loadOlder, openChatWith, openConversation, searchAttachables, sendMessage, useChat,
 } from '@/lib/chat';
 import { cn } from '@/lib/utils';
+import type { SharedProps } from '@/types';
 
 const typeIcons: Record<string, typeof Lightbulb> = {
     content: Lightbulb,
@@ -258,20 +259,82 @@ function AttachmentPicker({ types, onPick, onClose }: { types: Record<string, st
     );
 }
 
+function escapeRegExp(text: string) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Highlights @everyone and @Name in a message body. */
+function withMentions(body: string, names: string[], mine: boolean): ReactNode {
+    const tokens = ['everyone', 'all', ...names].sort((a, b) => b.length - a.length).map(escapeRegExp);
+    const pattern = new RegExp(`(^|\\s)(@(?:${tokens.join('|')}))(?![\\p{L}\\p{N}_])`, 'giu');
+    const parts: ReactNode[] = [];
+    let last = 0;
+    for (const match of body.matchAll(pattern)) {
+        const start = (match.index ?? 0) + match[1].length;
+        parts.push(body.slice(last, start));
+        parts.push(<span key={start} className={cn('rounded px-0.5 font-semibold', mine ? 'bg-white/20' : 'bg-brand-50 text-brand-800')}>{match[2]}</span>);
+        last = start + match[2].length;
+    }
+    parts.push(body.slice(last));
+
+    return parts;
+}
+
+type MentionOption = { key: string; label: string; hint: string };
+
 function Composer() {
-    const { attachmentTypes, thread } = useChat();
+    const { attachmentTypes, thread, people } = useChat();
     const [body, setBody] = useState('');
     const [attachment, setAttachment] = useState<ChatAttachment | null>(null);
     const [picking, setPicking] = useState(false);
     const [sending, setSending] = useState(false);
     const [error, setError] = useState('');
+    const field = useRef<HTMLTextAreaElement>(null);
+    const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
+    const [highlight, setHighlight] = useState(0);
 
     useEffect(() => {
         setBody('');
         setAttachment(null);
         setPicking(false);
         setError('');
+        setMention(null);
     }, [thread?.conversationId]);
+
+    const mentionOptions = useMemo((): MentionOption[] => {
+        if (!mention) return [];
+        const query = mention.query.toLowerCase();
+        const candidates = thread?.kind === 'team' ? people : people.filter((person) => person.id === thread?.user?.id);
+        const options: MentionOption[] = [
+            ...(thread?.kind === 'team' ? [{ key: 'everyone', label: 'everyone', hint: 'Notify the whole team' }] : []),
+            ...candidates.map((person) => ({ key: String(person.id), label: person.name, hint: person.job_title ?? '' })),
+        ];
+
+        return options
+            .filter((option) => !query || option.label.toLowerCase().split(/\s+/).some((word) => word.startsWith(query)) || option.label.toLowerCase().startsWith(query))
+            .slice(0, 8);
+    }, [mention, people, thread?.kind, thread?.user?.id]);
+
+    // Looks for "@word" right before the caret.
+    function updateMention(value: string, caret: number) {
+        const match = /(^|\s)@([^\s@]{0,30})$/.exec(value.slice(0, caret));
+        setMention(match ? { query: match[2], start: caret - match[2].length - 1 } : null);
+        setHighlight(0);
+    }
+
+    function pickMention(option: MentionOption) {
+        if (!mention) return;
+        const caret = field.current?.selectionStart ?? body.length;
+        const inserted = `@${option.label} `;
+        const next = body.slice(0, mention.start) + inserted + body.slice(caret);
+        setBody(next);
+        setMention(null);
+        const position = mention.start + inserted.length;
+        requestAnimationFrame(() => {
+            field.current?.focus();
+            field.current?.setSelectionRange(position, position);
+        });
+    }
 
     async function submit(event?: FormEvent) {
         event?.preventDefault();
@@ -290,6 +353,24 @@ function Composer() {
     }
 
     function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+        if (mentionOptions.length > 0) {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const step = event.key === 'ArrowDown' ? 1 : -1;
+                setHighlight((index) => (index + step + mentionOptions.length) % mentionOptions.length);
+                return;
+            }
+            if (event.key === 'Enter' || event.key === 'Tab') {
+                event.preventDefault();
+                pickMention(mentionOptions[Math.min(highlight, mentionOptions.length - 1)]);
+                return;
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                setMention(null);
+                return;
+            }
+        }
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
             void submit();
@@ -298,6 +379,25 @@ function Composer() {
 
     return (
         <form onSubmit={submit} className="relative border-t border-zinc-100 bg-white p-2">
+            {mentionOptions.length > 0 && (
+                <div className="absolute bottom-full left-2 right-2 z-10 mb-1 max-h-60 overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-lg" role="listbox" aria-label="Mention someone">
+                    {mentionOptions.map((option, index) => (
+                        <button
+                            key={option.key}
+                            type="button"
+                            role="option"
+                            aria-selected={index === highlight}
+                            onMouseDown={(event) => { event.preventDefault(); pickMention(option); }}
+                            onMouseEnter={() => setHighlight(index)}
+                            className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm', index === highlight ? 'bg-brand-50 text-brand-900' : 'text-zinc-800')}
+                        >
+                            {option.key === 'everyone' ? <Users className="h-4 w-4 shrink-0 text-brand-700" /> : <Avatar name={option.label} className="h-6 w-6 text-[10px]" />}
+                            <span className="font-medium">@{option.label}</span>
+                            {option.hint && <span className="truncate text-xs text-zinc-500">{option.hint}</span>}
+                        </button>
+                    ))}
+                </div>
+            )}
             {picking && <AttachmentPicker types={attachmentTypes} onClose={() => setPicking(false)} onPick={(item) => { setAttachment(item); setPicking(false); }} />}
             {attachment && (
                 <div className="mb-2 flex items-center gap-2 rounded-xl bg-brand-50 px-2.5 py-1.5 text-xs text-brand-800">
@@ -312,11 +412,16 @@ function Composer() {
                     <Paperclip className="h-5 w-5" />
                 </button>
                 <textarea
+                    ref={field}
                     value={body}
-                    onChange={(event) => setBody(event.target.value)}
+                    onChange={(event) => {
+                        setBody(event.target.value);
+                        updateMention(event.target.value, event.target.selectionStart ?? event.target.value.length);
+                    }}
                     onKeyDown={onKeyDown}
+                    onBlur={() => setMention(null)}
                     rows={1}
-                    placeholder={thread?.kind === 'team' ? 'Message the whole team…' : 'Write a message…'}
+                    placeholder={thread?.kind === 'team' ? 'Message the team… type @ to mention' : 'Write a message…'}
                     className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm outline-none focus:border-brand-700 focus:bg-white"
                 />
                 <button type="submit" disabled={sending || (!body.trim() && !attachment)} className="rounded-full bg-brand-700 p-2.5 text-white hover:bg-brand-800 disabled:opacity-40" aria-label="Send">
@@ -337,6 +442,8 @@ export function ChatThreadView({ onBack, actions, banner, className }: { onBack?
     const onlineCount = people.filter((item) => item.online).length;
     const messages = thread?.messages ?? [];
     const lastMine = [...messages].reverse().find((message) => message.user_id === meId);
+    const myName = usePage<SharedProps>().props.auth.user?.name ?? '';
+    const mentionNames = useMemo(() => [...people.map((item) => item.name), myName].filter(Boolean), [people, myName]);
 
     useLayoutEffect(() => {
         const element = scroller.current;
@@ -418,7 +525,7 @@ export function ChatThreadView({ onBack, actions, banner, className }: { onBack?
                                 <span className="mb-0.5 px-1 text-[11px] font-medium text-zinc-600">{message.user_name ?? 'Former teammate'}</span>
                             )}
                             <div className={cn('max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm', mine ? 'rounded-br-md bg-brand-700 text-white' : 'rounded-bl-md bg-white text-zinc-900 ring-1 ring-zinc-200')}>
-                                {message.body && <p className="whitespace-pre-wrap break-words">{message.body}</p>}
+                                {message.body && <p className="whitespace-pre-wrap break-words">{withMentions(message.body, mentionNames, mine)}</p>}
                                 {message.attachment && <AttachmentCard attachment={message.attachment} mine={mine} />}
                             </div>
                             {!grouped && <span className="mt-0.5 px-1 text-[10px] text-zinc-400">{timeLabel(message.created_at)}</span>}
@@ -434,11 +541,96 @@ export function ChatThreadView({ onBack, actions, banner, className }: { onBack?
     );
 }
 
-/** Floating chat bubble pinned bottom-right; opens straight into the team group chat. */
+const BUBBLE_SIZE = 48;
+const BUBBLE_MARGIN = 8;
+const BUBBLE_KEY = 'chat-bubble-position';
+
+type Point = { x: number; y: number };
+
+function clampBubble(point: Point): Point {
+    return {
+        x: Math.min(Math.max(point.x, BUBBLE_MARGIN), window.innerWidth - BUBBLE_SIZE - BUBBLE_MARGIN),
+        y: Math.min(Math.max(point.y, BUBBLE_MARGIN), window.innerHeight - BUBBLE_SIZE - BUBBLE_MARGIN),
+    };
+}
+
+function savedBubble(): Point | null {
+    try {
+        const saved = JSON.parse(localStorage.getItem(BUBBLE_KEY) ?? 'null');
+        return saved && typeof saved.x === 'number' && typeof saved.y === 'number' ? clampBubble(saved) : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Opens the panel on whichever side of the moved bubble has room. */
+function panelStyle(bubble: Point): React.CSSProperties {
+    const above = bubble.y + BUBBLE_SIZE / 2 > window.innerHeight / 2;
+    const room = above ? bubble.y - 16 : window.innerHeight - bubble.y - BUBBLE_SIZE - 16;
+    const style: React.CSSProperties = { height: Math.min(544, Math.max(240, room)) };
+    // Same width as the panel's classes (max-w-sm, 0.75rem gutters), so it never runs off screen.
+    const width = Math.min(384, window.innerWidth - 24);
+    const maxOffset = Math.max(12, window.innerWidth - width - 12);
+    if (bubble.x + BUBBLE_SIZE / 2 > window.innerWidth / 2) {
+        style.right = Math.min(maxOffset, Math.max(12, window.innerWidth - bubble.x - BUBBLE_SIZE));
+    } else {
+        style.left = Math.min(maxOffset, Math.max(12, bubble.x));
+    }
+    if (above) {
+        style.bottom = window.innerHeight - bubble.y + 8;
+    } else {
+        style.top = bubble.y + BUBBLE_SIZE + 8;
+    }
+
+    return style;
+}
+
+/** Floating chat bubble (drag it anywhere; the spot is remembered); opens straight into the team group chat. */
 export function ChatWidget() {
     const { unreadTotal, conversations, teamId, thread } = useChat();
     const [open, setOpen] = useState(false);
+    const [bubble, setBubble] = useState<Point | null>(savedBubble);
+    const drag = useRef<{ offsetX: number; offsetY: number; startX: number; startY: number; moved: boolean } | null>(null);
+    const justDragged = useRef(false);
     const directUnread = conversations.filter((item) => item.kind === 'direct').reduce((sum, item) => sum + item.unread, 0);
+
+    useEffect(() => {
+        const keepOnScreen = () => setBubble((point) => (point ? clampBubble(point) : point));
+        window.addEventListener('resize', keepOnScreen);
+        return () => window.removeEventListener('resize', keepOnScreen);
+    }, []);
+
+    function startDrag(event: React.PointerEvent<HTMLButtonElement>) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        drag.current = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top, startX: event.clientX, startY: event.clientY, moved: false };
+        event.currentTarget.setPointerCapture(event.pointerId);
+    }
+
+    function moveDrag(event: React.PointerEvent<HTMLButtonElement>) {
+        const current = drag.current;
+        if (!current) return;
+        // A small wiggle is still a tap.
+        if (!current.moved && Math.hypot(event.clientX - current.startX, event.clientY - current.startY) < 6) return;
+        current.moved = true;
+        setBubble(clampBubble({ x: event.clientX - current.offsetX, y: event.clientY - current.offsetY }));
+    }
+
+    function endDrag() {
+        if (drag.current?.moved) {
+            // Swallow only the click that ends this drag; some browsers send none.
+            justDragged.current = true;
+            window.setTimeout(() => { justDragged.current = false; }, 0);
+            setBubble((point) => {
+                try {
+                    if (point) localStorage.setItem(BUBBLE_KEY, JSON.stringify(point));
+                } catch {
+                    // Private mode: the spot just isn't remembered.
+                }
+                return point;
+            });
+        }
+        drag.current = null;
+    }
 
     // Only treat the team chat as being read while the panel actually shows it.
     useEffect(() => {
@@ -454,7 +646,13 @@ export function ChatWidget() {
     return (
         <>
             {open && (
-                <div className="fixed bottom-[calc(9rem+env(safe-area-inset-bottom))] right-3 z-50 flex h-[min(34rem,calc(100vh-11rem))] w-[calc(100vw-1.5rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl lg:bottom-20 lg:right-5">
+                <div
+                    className={cn(
+                        'fixed z-50 flex w-[calc(100vw-1.5rem)] max-w-sm flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-2xl',
+                        !bubble && 'bottom-[calc(9rem+env(safe-area-inset-bottom))] right-3 h-[min(34rem,calc(100vh-11rem))] lg:bottom-20 lg:right-5',
+                    )}
+                    style={bubble ? panelStyle(bubble) : undefined}
+                >
                     {thread && thread.conversationId === teamId ? (
                         <ChatThreadView
                             className="h-full"
@@ -475,8 +673,23 @@ export function ChatWidget() {
             )}
             <button
                 type="button"
-                onClick={() => (open ? close() : setOpen(true))}
-                className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-3 z-50 grid h-12 w-12 place-items-center rounded-full bg-brand-700 text-white shadow-lg shadow-brand-700/30 transition hover:bg-brand-800 active:scale-95 lg:bottom-5 lg:right-5"
+                onPointerDown={startDrag}
+                onPointerMove={moveDrag}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onClick={() => {
+                    if (justDragged.current) {
+                        justDragged.current = false;
+                        return;
+                    }
+                    if (open) close(); else setOpen(true);
+                }}
+                className={cn(
+                    'fixed z-50 grid h-12 w-12 cursor-grab touch-none select-none place-items-center rounded-full bg-brand-700 text-white shadow-lg shadow-brand-700/30 transition-colors hover:bg-brand-800 active:cursor-grabbing',
+                    !bubble && 'bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-3 lg:bottom-5 lg:right-5',
+                )}
+                style={bubble ? { left: bubble.x, top: bubble.y } : undefined}
+                title="Drag to move"
                 aria-label={open ? 'Close team chat' : 'Open team chat'}
             >
                 {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}

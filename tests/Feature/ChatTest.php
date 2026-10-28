@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\ChatConversation;
 use App\Models\InspirationItem;
 use App\Models\Platform;
+use App\Models\UserNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\BuildsOperations;
@@ -84,6 +85,35 @@ class ChatTest extends TestCase
         $this->actingAs($dana)->postJson('/chat/sync', ['conversation_id' => $teamId])
             ->assertJsonPath('unread_total', 0)
             ->assertJsonCount(1, 'thread.messages');
+    }
+
+    public function test_mentions_notify_one_teammate_or_everyone(): void
+    {
+        $brand = $this->makeBrand();
+        $alice = $this->makeUser('marketing_manager', $brand);
+        $bob = $this->makeUser('creative', $brand);
+        $bob->forceFill(['name' => 'Bob Reyes'])->save();
+        $cara = $this->makeUser('creative', $this->makeBrand('Other'));
+
+        $teamId = $this->actingAs($alice)->postJson('/chat/sync')->json('team_id');
+        $mentions = fn ($user) => UserNotification::query()->where('user_id', $user->id)->where('type', 'mention')->count();
+
+        // "@Bob Reyes" tags Bob only; a plain "@" or an email address tags nobody.
+        $this->actingAs($alice)->postJson("/chat/conversations/{$teamId}/messages", ['body' => '@Bob Reyes can you check the reel?'])->assertOk();
+        $this->actingAs($alice)->postJson("/chat/conversations/{$teamId}/messages", ['body' => 'Send it to bob@example.com @'])->assertOk();
+        $this->assertSame(1, $mentions($bob));
+        $this->assertSame(0, $mentions($cara));
+        $this->assertSame(0, $mentions($alice));
+
+        $note = UserNotification::query()->where('user_id', $bob->id)->where('type', 'mention')->sole();
+        $this->assertSame($alice->name.' mentioned you', $note->title);
+        $this->assertStringContainsString('/messenger', $note->data['url']);
+
+        // "@everyone" tags the whole team except the sender.
+        $this->actingAs($alice)->postJson("/chat/conversations/{$teamId}/messages", ['body' => 'Meeting at 3 @everyone'])->assertOk();
+        $this->assertSame(2, $mentions($bob));
+        $this->assertSame(1, $mentions($cara));
+        $this->assertSame(0, $mentions($alice));
     }
 
     public function test_outsiders_cannot_read_or_post_in_a_conversation(): void

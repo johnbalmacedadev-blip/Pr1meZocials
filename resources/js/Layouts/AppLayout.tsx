@@ -59,7 +59,10 @@ export default function AppLayout({ title, children }: { title?: string; childre
     const [query, setQuery] = useState('');
     const recent = recentNotifications ?? [];
     const items = nav.filter((item) => item.show(can));
-    const current = (page.url.split('?')[0] || '/').replace(/\/$/, '') || '/';
+    // page.url includes the app subdirectory (e.g. /pr1mesocials/messenger); compare without it.
+    const base = basePath.replace(/\/$/, '');
+    const path = page.url.split('?')[0] || '/';
+    const current = ((base && (path === base || path.startsWith(`${base}/`)) ? path.slice(base.length) : path).replace(/\/$/, '')) || '/';
 
     const mobileTabs = useMemo((): TabItem[] => {
         const tabs: TabItem[] = [

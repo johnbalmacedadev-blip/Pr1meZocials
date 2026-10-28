@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\ChatConversation;
 use App\Models\ChatMessage;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\WebPushService;
+use Illuminate\Database\Eloquent\Collection;
 use App\Support\ChatAttachments;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -85,7 +87,7 @@ class ChatController extends Controller
         return response()->json(['conversation_id' => $conversation->id]);
     }
 
-    public function store(Request $request, ChatConversation $conversation, WebPushService $push): JsonResponse
+    public function store(Request $request, ChatConversation $conversation, WebPushService $push, NotificationService $notifications): JsonResponse
     {
         $user = $request->user();
         $conversation->ensureTeamMember($user);
@@ -126,19 +128,35 @@ class ChatController extends Controller
 
         $this->touchPresence($user);
 
+        $url = $conversation->isTeam()
+            ? route('messenger')
+            : route('messenger', ['tab' => 'direct', 'conversation' => $conversation->id]);
+
+        // @everyone / @Name: a notification in the bell (plus push and, if opted in, email).
+        $mentioned = $this->mentioned($conversation, $user, $body);
+        foreach ($mentioned as $person) {
+            $notifications->send(
+                $person,
+                'mention',
+                $user->name.' mentioned you',
+                Str::limit(($conversation->isTeam() ? 'Team chat: ' : '').$body, 160),
+                'chat-mention:'.$message->id.':'.$person->id,
+                ['url' => $url],
+            );
+        }
+
         // Phone/browser push for everyone else in the conversation, sent after the response.
         $recipients = $conversation->participants()
             ->where('users.is_active', true)
             ->whereKeyNot($user->id)
+            ->whereKeyNot($mentioned->modelKeys())
             ->pluck('users.id')
             ->map(fn ($id) => (int) $id)
             ->all();
         $push->queue($recipients, [
             'title' => $conversation->isTeam() ? $user->name.' · Team chat' : $user->name,
             'body' => Str::limit($body !== '' ? $body : 'Shared: '.($attachment['title'] ?? 'an item'), 160),
-            'url' => $conversation->isTeam()
-                ? route('messenger')
-                : route('messenger', ['tab' => 'direct', 'conversation' => $conversation->id]),
+            'url' => $url,
             'tag' => 'chat-'.$conversation->id,
         ]);
 
@@ -175,6 +193,30 @@ class ChatController extends Controller
         return response()->json([
             'items' => ChatAttachments::search($request->user(), $data['type'], trim((string) ($data['q'] ?? ''))),
         ]);
+    }
+
+    /**
+     * People tagged in a message: "@everyone" tags everyone who can read the
+     * conversation; "@Full Name" tags that teammate. The sender is never included.
+     *
+     * @return Collection<int, User>
+     */
+    private function mentioned(ChatConversation $conversation, User $sender, string $body): Collection
+    {
+        if (! str_contains($body, '@')) {
+            return new Collection;
+        }
+
+        $audience = $conversation->isTeam()
+            ? User::query()->where('is_active', true)->whereKeyNot($sender->id)->get()
+            : $conversation->participants()->where('users.is_active', true)->whereKeyNot($sender->id)->get();
+
+        if (preg_match('/(^|\s)@(everyone|all)(?![\p{L}\p{N}_])/iu', $body)) {
+            return $audience;
+        }
+
+        return $audience->filter(fn (User $person) => $person->name !== ''
+            && preg_match('/(^|\s)@'.preg_quote($person->name, '/').'(?![\p{L}\p{N}_])/iu', $body))->values();
     }
 
     private function touchPresence(User $user): void
