@@ -65,9 +65,13 @@ class ContentItemController extends Controller
         return redirect()->route('content.show', $item)->with('success', 'Idea '.$item->reference_number.' captured.');
     }
 
-    public function show(Request $request, ContentItem $content): Response
+    public function show(Request $request, ContentItem $content): Response|RedirectResponse
     {
         $this->authorize('view', $content);
+
+        if ($content->is_ticket) {
+            return redirect()->route('tickets.show', $content);
+        }
 
         return Inertia::render('Content/Show', [
             'contentItem' => $this->presenter->detail($content, $request->user()),
@@ -75,9 +79,13 @@ class ContentItemController extends Controller
         ]);
     }
 
-    public function edit(Request $request, ContentItem $content): Response
+    public function edit(Request $request, ContentItem $content): Response|RedirectResponse
     {
         $this->authorize('update', $content);
+
+        if ($content->is_ticket) {
+            return redirect()->route('tickets.show', ['ticket' => $content, 'edit' => 1]);
+        }
 
         return Inertia::render('Content/Edit', [
             'contentItem' => $this->presenter->detail($content, $request->user()),

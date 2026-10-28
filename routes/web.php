@@ -100,6 +100,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/board', [ContentWorkflowController::class, 'board'])->name('board');
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
     Route::post('/tickets', [TicketController::class, 'store'])->middleware('throttle:uploads')->name('tickets.store');
+    Route::get('/tickets/{ticket}', [TicketController::class, 'show'])->name('tickets.show');
+    Route::get('/tickets/{ticket}/images/{image}', [TicketController::class, 'image'])->whereNumber('image')->name('tickets.images.show');
+    Route::post('/tickets/{ticket}', [TicketController::class, 'update'])->middleware('throttle:uploads')->name('tickets.update');
     Route::post('/task-notes', [TaskNoteController::class, 'store'])->name('task-notes.store');
     Route::post('/task-notes/{taskNote}/complete', [TaskNoteController::class, 'complete'])->name('task-notes.complete');
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar');

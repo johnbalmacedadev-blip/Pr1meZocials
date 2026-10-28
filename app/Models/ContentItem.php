@@ -64,6 +64,7 @@ class ContentItem extends Model
             'published_at' => 'datetime',
             'archived_at' => 'datetime',
             'complexity' => 'integer',
+            'is_ticket' => 'boolean',
         ];
     }
 

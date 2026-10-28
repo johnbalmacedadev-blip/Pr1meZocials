@@ -64,6 +64,56 @@ class TicketTest extends TestCase
             ->where('tickets.0.team.0.id', $lead->id));
     }
 
+    public function test_ticket_has_its_own_page_and_can_be_edited(): void
+    {
+        $brand = $this->makeBrand();
+        $manager = $this->makeUser('marketing_manager', $brand);
+        $lead = $this->makeUser('creative', $brand);
+        $helper = $this->makeUser('creative', $brand);
+
+        $this->actingAs($manager)->post('/tickets', [
+            'title' => 'Reel for launch',
+            'brand_id' => $brand->id,
+            'format' => 'reel',
+            'images' => [UploadedFile::fake()->image('one.jpg'), UploadedFile::fake()->image('two.png')],
+            'member_ids' => [$lead->id],
+        ])->assertSessionHasNoErrors();
+        $ticket = ContentItem::query()->sole();
+        [$first, $second] = $ticket->assets()->orderBy('id')->pluck('id')->all();
+
+        // Content links and the content edit button open the ticket page instead of the content brief.
+        $this->actingAs($manager)->get("/content/{$ticket->id}")->assertRedirect("/tickets/{$ticket->id}");
+        $this->actingAs($manager)->get("/content/{$ticket->id}/edit")->assertRedirect("/tickets/{$ticket->id}?edit=1");
+
+        $this->actingAs($lead)->get("/tickets/{$ticket->id}")->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Tickets/Show')
+            ->where('ticket.title', 'Reel for launch')
+            ->has('ticket.images', 2));
+        $this->actingAs($lead)->get("/tickets/{$ticket->id}/images/{$first}")->assertOk();
+
+        $this->actingAs($manager)->post("/tickets/{$ticket->id}", [
+            'title' => 'Reel for big launch',
+            'details' => 'Make it 30 seconds.',
+            'format' => 'reel',
+            'priority' => 'urgent',
+            'drive_url' => 'https://docs.google.com/document/d/xyz',
+            'remove_image_ids' => [$first],
+            'images' => [UploadedFile::fake()->image('three.webp')],
+            'member_ids' => [$lead->id, $helper->id],
+        ])->assertRedirect("/tickets/{$ticket->id}")->assertSessionHasNoErrors();
+
+        $ticket->refresh();
+        $this->assertSame('Reel for big launch', $ticket->title);
+        $this->assertSame('Make it 30 seconds.', $ticket->description);
+        $this->assertSame('urgent', $ticket->priority);
+        $this->assertSame(2, $ticket->assets()->count());
+        $this->assertNotContains($first, $ticket->assets()->pluck('id')->all());
+        $this->assertContains($second, $ticket->assets()->pluck('id')->all());
+        $this->assertSame([$helper->id], $ticket->collaborators()->pluck('users.id')->all());
+        $this->assertTrue(UserNotification::query()->where('user_id', $helper->id)->where('type', 'assigned')->exists());
+        $this->actingAs($manager)->get("/tickets/{$ticket->id}/images/{$first}")->assertNotFound();
+    }
+
     public function test_ticket_needs_a_team_and_a_drive_link(): void
     {
         $brand = $this->makeBrand();

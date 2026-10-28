@@ -3,7 +3,7 @@ import { FormEvent, useState } from 'react';
 import { Button, Field, Input, PageHeader, PriorityBadge, Select, StatusBadge, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
-import { formatBytes, formatDate } from '@/lib/utils';
+import { formatBytes, formatDate, withBase } from '@/lib/utils';
 import type { FormOptions, SharedProps } from '@/types';
 
 interface Detail {
@@ -350,7 +350,7 @@ function Platforms({ item }: { item: Detail }) {
 }
 
 function Assets({ item }: { item: Detail }) {
-    const lookups = usePage<SharedProps>().props.lookups;
+    const { lookups, basePath = '' } = usePage<SharedProps>().props;
     const form = useForm<{ file: File | null; name: string; description: string; kind: string; is_final: boolean }>({ file: null, name: '', description: '', kind: 'image', is_final: false });
 
     return (
@@ -359,11 +359,11 @@ function Assets({ item }: { item: Detail }) {
             <div className="grid gap-3 md:grid-cols-2">
                 {item.assets.map((asset) => (
                     <article key={asset.id} className="rounded-xl border border-zinc-200 bg-white p-4">
-                        {asset.previewable && asset.mime_type.startsWith('image/') && <img src={`/assets/${asset.id}/preview`} alt="" className="mb-3 max-h-48 w-full rounded-lg object-cover" />}
-                        {asset.previewable && asset.mime_type.startsWith('video/') && <video src={`/assets/${asset.id}/preview`} controls className="mb-3 max-h-48 w-full rounded-lg" />}
+                        {asset.previewable && asset.mime_type.startsWith('image/') && <img src={withBase(`/assets/${asset.id}/preview`, basePath)} alt="" className="mb-3 max-h-48 w-full rounded-lg object-cover" />}
+                        {asset.previewable && asset.mime_type.startsWith('video/') && <video src={withBase(`/assets/${asset.id}/preview`, basePath)} controls className="mb-3 max-h-48 w-full rounded-lg" />}
                         <h3 className="font-medium">{asset.name}</h3>
                         <p className="text-sm text-zinc-500">{asset.kind_label} · v{asset.version} · {formatBytes(asset.size)} · {asset.uploader?.name}</p>
-                        <a className="mt-2 inline-block text-sm font-medium text-brand-700" href={`/assets/${asset.id}/download`}>Download</a>
+                        <a className="mt-2 inline-block text-sm font-medium text-brand-700" href={withBase(`/assets/${asset.id}/download`, basePath)}>Download</a>
                     </article>
                 ))}
             </div>
