@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, parseISO, startOfMonth, startOfWeek } from 'date-fns';
-import { Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { CompactMonth } from '@/Components/CompactMonth';
 import { EmptyState, PageHeader, Select } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import type { FormOptions } from '@/types';
@@ -63,10 +64,10 @@ export default function EventsIndex({
                 actions={canCreate ? <Link href="/events/create" className="inline-flex h-10 items-center rounded-lg bg-brand-700 px-3 text-sm font-medium text-white">New event</Link> : undefined}
             />
 
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-                <button type="button" className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => shift(-1)}>Previous</button>
+            <div className="mb-3 flex flex-wrap items-center gap-2 sm:mb-4">
+                <button type="button" className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm" onClick={() => shift(-1)} aria-label="Previous month"><ChevronLeft className="h-4 w-4 sm:hidden" /><span className="hidden sm:inline">Previous</span></button>
                 <button type="button" className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => router.get('/events', { brand_id: filters.brand_id || undefined }, { preserveState: true })}>Today</button>
-                <button type="button" className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm" onClick={() => shift(1)}>Next</button>
+                <button type="button" className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm" onClick={() => shift(1)} aria-label="Next month"><ChevronRight className="h-4 w-4 sm:hidden" /><span className="hidden sm:inline">Next</span></button>
                 <strong className="px-2 text-sm">{format(anchor, 'MMMM yyyy')}</strong>
                 {options.brands.length > 1 && (
                     <Select
@@ -80,10 +81,38 @@ export default function EventsIndex({
                 )}
             </div>
 
-            <div className="mb-1 grid grid-cols-7 text-center text-xs font-medium text-zinc-500">
+            <CompactMonth
+                className="mb-6 sm:hidden"
+                days={days}
+                anchor={anchor}
+                items={occurrences}
+                dateOf={(item) => item.occurs_on}
+                dotClass={(item) => (item.status === 'cancelled' ? 'bg-zinc-400' : 'bg-brand-700')}
+                noun="event"
+                dayAction={canCreate ? (key) => (
+                    <Link href={`/events/create?date=${key}${filters.brand_id ? `&brand_id=${filters.brand_id}` : ''}`} className="inline-flex items-center gap-1 rounded-full bg-brand-700 px-2.5 py-1 text-xs font-medium text-white">
+                        <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Add event
+                    </Link>
+                ) : undefined}
+                renderItem={(item) => (
+                    <Link
+                        href={`/events/${item.event_id}`}
+                        className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm ${item.status === 'cancelled' ? 'bg-zinc-100 text-zinc-500 line-through' : 'bg-brand-50 text-brand-900'}`}
+                    >
+                        {item.start_time && <span className="shrink-0 text-xs font-semibold text-zinc-600">{item.start_time}</span>}
+                        <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                        {(item.has_poster || item.has_video) && (
+                            <span className="shrink-0 text-xs text-brand-700">
+                                {item.has_poster ? 'Poster' : ''}{item.has_poster && item.has_video ? ' · ' : ''}{item.has_video ? 'Video' : ''}
+                            </span>
+                        )}
+                    </Link>
+                )}
+            />
+            <div className="mb-1 hidden grid-cols-7 text-center text-xs font-medium text-zinc-500 sm:grid">
                 {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => <div key={day}>{day}</div>)}
             </div>
-            <div className="mb-8 grid grid-cols-1 gap-2 sm:grid-cols-7">
+            <div className="mb-8 hidden grid-cols-7 gap-2 sm:grid">
                 {days.map((day) => {
                     const key = format(day, 'yyyy-MM-dd');
                     const dayItems = occurrences.filter((item) => item.occurs_on === key);
