@@ -7,10 +7,11 @@ import { withBase } from '@/lib/utils';
 import type { SharedProps } from '@/types';
 
 /**
- * Shares a link to a page in the app. Whoever opens it signs in first (if needed)
- * and then lands on that page; on Android the installed app opens the link itself.
+ * Shares a link to a page in the app. A view-only link opens a read-only summary
+ * without signing in; otherwise whoever opens it signs in first and then lands on
+ * that page. On Android the installed app opens the link itself.
  */
-export function ShareButton({ path, title, kind }: { path: string; title: string; kind: string }) {
+export function ShareButton({ path, title, kind, viewOnly = false }: { path: string; title: string; kind: string; viewOnly?: boolean }) {
     const { basePath = '', facebookAppId = '' } = usePage<SharedProps>().props;
     const { touch } = usePwa();
     const [open, setOpen] = useState(false);
@@ -55,7 +56,7 @@ export function ShareButton({ path, title, kind }: { path: string; title: string
         window.open('https://www.messenger.com/', '_blank', 'noopener');
     }
 
-    const email = `mailto:?subject=${encodeURIComponent(message)}&body=${encodeURIComponent(`${message}\n\nOpen it here: ${url}\n\nYou may need to sign in first.`)}`;
+    const email = `mailto:?subject=${encodeURIComponent(message)}&body=${encodeURIComponent(`${message}\n\nOpen it here: ${url}\n\n${viewOnly ? 'Anyone with the link can view it. Log in to see the full details.' : 'You may need to sign in first.'}`)}`;
 
     return (
         <>
@@ -63,7 +64,11 @@ export function ShareButton({ path, title, kind }: { path: string; title: string
                 <Share2 className="h-4 w-4" /> Share
             </Button>
             <Modal open={open} title={`Share ${kind.toLowerCase()}`} onOpenChange={setOpen}>
-                <p className="text-sm text-zinc-600">Send this link to a teammate. They sign in if needed, then land right on this {kind.toLowerCase()}.</p>
+                <p className="text-sm text-zinc-600">
+                    {viewOnly
+                        ? `Anyone with this link can view the ${kind.toLowerCase()} summary (view only, no replies or edits). Images, Drive files and the team are shown after they log in.`
+                        : `Send this link to a teammate. They sign in if needed, then land right on this ${kind.toLowerCase()}.`}
+                </p>
                 <div className="mt-3 flex gap-2">
                     <input id="share-link" readOnly value={url} onFocus={(event) => event.target.select()} className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm text-zinc-700" />
                     <Button type="button" variant="secondary" onClick={copy} aria-label="Copy link">

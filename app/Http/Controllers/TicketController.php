@@ -19,6 +19,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -102,8 +103,40 @@ class TicketController extends Controller
                     ->map(fn (CreativeAsset $asset) => ['id' => $asset->id, 'name' => $asset->original_filename])
                     ->values(),
             ],
+            'shareUrl' => URL::signedRoute('tickets.shared', $ticket, absolute: false),
             'canEdit' => $request->user()->can('update', $ticket),
             'startEditing' => $request->boolean('edit'),
+        ]);
+    }
+
+    /**
+     * Shared task link: anyone with the signed link sees a read-only summary.
+     * Images, the Drive link and the team stay behind sign-in.
+     */
+    public function shared(Request $request, ContentItem $ticket): Response|RedirectResponse
+    {
+        abort_unless($ticket->is_ticket, 404);
+
+        if ($request->user()?->can('view', $ticket)) {
+            return redirect()->route('tickets.show', $ticket);
+        }
+
+        $ticket->load('status:id,name,slug,color');
+
+        return Inertia::render('Tickets/Shared', [
+            'ticket' => [
+                'id' => $ticket->id,
+                'reference_number' => $ticket->reference_number,
+                'title' => $ticket->title,
+                'details' => $ticket->description,
+                'format_label' => $ticket->formatLabel(),
+                'priority' => $ticket->priority,
+                'deadline' => $ticket->deadline?->toDateString(),
+                'status' => $ticket->status?->only(['name', 'slug', 'color']),
+                'images' => $ticket->assets()->where('mime_type', 'like', 'image/%')->count(),
+                'has_drive' => $this->driveUrl($ticket) !== null,
+            ],
+            'signedIn' => $request->user() !== null,
         ]);
     }
 

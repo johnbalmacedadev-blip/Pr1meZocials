@@ -38,6 +38,9 @@ Route::get('/sw.js', [PwaController::class, 'serviceWorker'])->name('pwa.worker'
 Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
 Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
 
+// Shared task links open a read-only summary without signing in.
+Route::get('/share/tickets/{ticket}', [TicketController::class, 'shared'])->middleware(['signed:relative', 'throttle:60,1'])->name('tickets.shared');
+
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->middleware('throttle:login');

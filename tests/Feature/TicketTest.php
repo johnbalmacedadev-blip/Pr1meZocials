@@ -139,6 +139,50 @@ class TicketTest extends TestCase
             ->assertRedirect("/tickets/{$ticket->id}");
     }
 
+    public function test_shared_link_shows_a_view_only_summary_without_signing_in(): void
+    {
+        $brand = $this->makeBrand();
+        $manager = $this->makeUser('marketing_manager', $brand);
+        $lead = $this->makeUser('creative', $brand);
+
+        $this->actingAs($manager)->post('/tickets', [
+            'title' => 'Shared task',
+            'details' => 'Shoot the bundle.',
+            'brand_id' => $brand->id,
+            'format' => 'photo',
+            'drive_url' => 'https://drive.google.com/drive/folders/secret',
+            'images' => [UploadedFile::fake()->image('ref.jpg')],
+            'member_ids' => [$lead->id],
+        ])->assertSessionHasNoErrors();
+        $ticket = ContentItem::query()->sole();
+
+        $shareUrl = null;
+        $this->actingAs($manager)->get("/tickets/{$ticket->id}")->assertInertia(function (Assert $page) use (&$shareUrl) {
+            $shareUrl = $page->toArray()['props']['shareUrl'];
+        });
+        $this->assertStringStartsWith("/share/tickets/{$ticket->id}?signature=", $shareUrl);
+
+        // A teammate who is signed in goes straight to the full ticket.
+        $this->actingAs($lead)->get($shareUrl)->assertRedirect("/tickets/{$ticket->id}");
+        auth()->logout();
+
+        $this->get($shareUrl)->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Tickets/Shared')
+            ->where('ticket.title', 'Shared task')
+            ->where('ticket.details', 'Shoot the bundle.')
+            ->where('ticket.images', 1)
+            ->where('ticket.has_drive', true)
+            ->missing('ticket.drive_url')
+            ->missing('ticket.team')
+            ->where('signedIn', false));
+
+        // Tampered or unsigned links are refused, and images stay private.
+        $this->get("/share/tickets/{$ticket->id}")->assertForbidden();
+        $this->get(str_replace('signature=', 'signature=0', $shareUrl))->assertForbidden();
+        $imageId = $ticket->assets()->value('id');
+        $this->get("/tickets/{$ticket->id}/images/{$imageId}")->assertRedirect('/login');
+    }
+
     public function test_ticket_needs_a_team_and_a_drive_link(): void
     {
         $brand = $this->makeBrand();

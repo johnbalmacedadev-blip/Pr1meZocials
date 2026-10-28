@@ -26,7 +26,7 @@ interface Ticket {
     images: { id: number; name: string }[];
 }
 
-export default function TicketShow({ ticket, canEdit, startEditing, ...options }: TicketOptions & { ticket: Ticket; canEdit: boolean; startEditing: boolean }) {
+export default function TicketShow({ ticket, shareUrl, canEdit, startEditing, ...options }: TicketOptions & { ticket: Ticket; shareUrl: string; canEdit: boolean; startEditing: boolean }) {
     const basePath = usePage<SharedProps>().props.basePath ?? '';
     const [editing, setEditing] = useState(canEdit && startEditing);
     const [viewing, setViewing] = useState<{ url: string; name: string } | null>(null);
@@ -77,7 +77,7 @@ export default function TicketShow({ ticket, canEdit, startEditing, ...options }
                 </div>
                 {!editing && (
                     <div className="flex gap-2">
-                        <ShareButton path={`/tickets/${ticket.id}`} title={ticket.title} kind="Task" />
+                        <ShareButton path={shareUrl} title={ticket.title} kind="Task" viewOnly />
                         {canEdit && <Button variant="secondary" onClick={startEdit}><Pencil className="h-4 w-4" /> Edit ticket</Button>}
                     </div>
                 )}
