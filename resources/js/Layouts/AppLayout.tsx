@@ -1,7 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import {
-    BarChart3, Bell, CalendarDays, CalendarHeart, Columns3, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, MessageCircle, MoreHorizontal, Plus, Search, Send, Settings, Sparkles, CalendarRange,
+    BarChart3, Bell, CalendarDays, CalendarHeart, Columns3, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, MessageCircle, MoreHorizontal, Plus, Search, Send, Settings, Sparkles, CalendarRange, Ticket,
     UserRound, Users, X,
 } from 'lucide-react';
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
@@ -19,6 +19,7 @@ const nav = [
     { href: '/content', label: 'Content Ideas', icon: Lightbulb, show: (can: Can) => can('content.view') || can('content.view.any') },
     { href: '/inspiration', label: 'Inspiration', icon: Sparkles, show: (can: Can) => can('inspiration.view') || can('content.view') || can('content.view.any') || can('content.create') },
     { href: '/creative-assets', label: 'Creative Assets', icon: FolderOpen, show: (can: Can) => can('resources.view') || can('assets.view') || can('content.view') || can('content.view.any') || can('content.create') },
+    { href: '/tickets', label: 'Ticket', icon: Ticket, show: (can: Can) => can('content.create') },
     { href: '/board', label: 'Production Board', icon: Columns3, show: (can: Can) => can('board.view') || can('content.view') || can('content.view.any') },
     { href: '/calendar', label: 'Content Calendar', icon: CalendarDays, show: (can: Can) => can('calendar.view') || can('content.view') || can('content.view.any') },
     { href: '/events', label: 'Events Calendar', icon: CalendarHeart, show: (can: Can) => can('events.view') },

@@ -564,6 +564,7 @@ class ComposerStaticInitd8f67b824a1bf31c8999ead558d9b485
         'App\\Http\\Controllers\\TaskNoteController' => __DIR__ . '/../..' . '/app/Http/Controllers/TaskNoteController.php',
         'App\\Http\\Controllers\\TeamController' => __DIR__ . '/../..' . '/app/Http/Controllers/TeamController.php',
         'App\\Http\\Controllers\\TeamInviteController' => __DIR__ . '/../..' . '/app/Http/Controllers/TeamInviteController.php',
+        'App\\Http\\Controllers\\TicketController' => __DIR__ . '/../..' . '/app/Http/Controllers/TicketController.php',
         'App\\Http\\Middleware\\HandleInertiaRequests' => __DIR__ . '/../..' . '/app/Http/Middleware/HandleInertiaRequests.php',
         'App\\Http\\Requests\\StoreContentRequest' => __DIR__ . '/../..' . '/app/Http/Requests/StoreContentRequest.php',
         'App\\Http\\Requests\\UpdateContentRequest' => __DIR__ . '/../..' . '/app/Http/Requests/UpdateContentRequest.php',

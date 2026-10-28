@@ -28,6 +28,7 @@ use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\TeamInviteController;
 use App\Http\Controllers\TaskNoteController;
+use App\Http\Controllers\TicketController;
 use Illuminate\Support\Facades\Route;
 
 // Installable app files: public so the browser can fetch them before sign-in.
@@ -97,6 +98,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/inspiration/{inspiration}', [InspirationController::class, 'destroy'])->name('inspiration.destroy');
 
     Route::get('/board', [ContentWorkflowController::class, 'board'])->name('board');
+    Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
+    Route::post('/tickets', [TicketController::class, 'store'])->middleware('throttle:uploads')->name('tickets.store');
     Route::post('/task-notes', [TaskNoteController::class, 'store'])->name('task-notes.store');
     Route::post('/task-notes/{taskNote}/complete', [TaskNoteController::class, 'complete'])->name('task-notes.complete');
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar');

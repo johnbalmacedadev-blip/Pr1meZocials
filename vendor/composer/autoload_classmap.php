@@ -43,6 +43,7 @@ return array(
     'App\\Http\\Controllers\\TaskNoteController' => $baseDir . '/app/Http/Controllers/TaskNoteController.php',
     'App\\Http\\Controllers\\TeamController' => $baseDir . '/app/Http/Controllers/TeamController.php',
     'App\\Http\\Controllers\\TeamInviteController' => $baseDir . '/app/Http/Controllers/TeamInviteController.php',
+    'App\\Http\\Controllers\\TicketController' => $baseDir . '/app/Http/Controllers/TicketController.php',
     'App\\Http\\Middleware\\HandleInertiaRequests' => $baseDir . '/app/Http/Middleware/HandleInertiaRequests.php',
     'App\\Http\\Requests\\StoreContentRequest' => $baseDir . '/app/Http/Requests/StoreContentRequest.php',
     'App\\Http\\Requests\\UpdateContentRequest' => $baseDir . '/app/Http/Requests/UpdateContentRequest.php',

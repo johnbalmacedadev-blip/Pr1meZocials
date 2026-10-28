@@ -214,7 +214,7 @@ function Brief({ item, options }: { item: Detail; options: FormOptions }) {
                     <div key={label}><h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</h3><p className="mt-1 whitespace-pre-wrap text-sm">{value}</p></div>
                 ))}
                 {brief.every(([, value]) => !value) && <p className="text-sm text-zinc-500">The brief is still empty. Open Edit to add it without starting over.</p>}
-                {item.inspiration_url && <a className="text-sm font-medium text-brand-700" href={item.inspiration_url} target="_blank" rel="noreferrer">Inspiration: {item.inspiration_source || item.inspiration_url}</a>}
+                {item.inspiration_url && <a className="text-sm font-medium text-brand-700" href={item.inspiration_url} target="_blank" rel="noreferrer">{item.inspiration_source === 'Google Drive' ? 'Open Google Drive files' : `Inspiration: ${item.inspiration_source || item.inspiration_url}`}</a>}
                 {item.resource_links.length > 0 && (
                     <div>
                         <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Creative assets</h3>
