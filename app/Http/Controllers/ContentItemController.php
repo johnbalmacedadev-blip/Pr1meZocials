@@ -26,7 +26,9 @@ class ContentItemController extends Controller
         $this->authorize('viewAny', ContentItem::class);
 
         $filters = $this->filters($request);
+        // Tickets have their own page, so they are not listed as content ideas.
         $items = $query->make($request->user(), $filters)
+            ->where('is_ticket', false)
             ->with(['brand:id,name', 'campaign:id,name', 'status:id,name,slug,color', 'owner:id,name', 'reviewer:id,name', 'platformVersions.platform:id,name,slug,color'])
             ->paginate(12)
             ->withQueryString();

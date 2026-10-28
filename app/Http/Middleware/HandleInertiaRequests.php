@@ -53,6 +53,8 @@ class HandleInertiaRequests extends Middleware
             'lookups' => fn () => $user ? Lookups::shared() : null,
             'appName' => config('app.name'),
             'basePath' => rtrim(parse_url((string) config('app.url'), PHP_URL_PATH) ?: '', '/'),
+            // Public app id, used by the Share button's Messenger send dialog on computers.
+            'facebookAppId' => fn () => $request->user() ? \App\Support\FacebookCredentials::appId() : '',
         ];
     }
 }

@@ -129,8 +129,8 @@ function BoardCard({ card, disabled }: { card: ContentSummary; disabled: boolean
     const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
     return (
         <article ref={setNodeRef} style={style} {...listeners} {...attributes} className={`rounded-lg border border-zinc-200 bg-white p-3 text-sm shadow-sm ${isDragging ? 'opacity-70' : ''} ${card.is_overdue ? 'ring-1 ring-rose-400' : ''}`}>
-            <Link href={`/content/${card.id}`} className="font-medium hover:underline" onPointerDown={(event) => event.stopPropagation()}>{card.title}</Link>
-            <p className="mt-1 text-xs text-zinc-500">{card.reference_number} · {card.brand?.name}</p>
+            <Link href={card.is_ticket ? `/tickets/${card.id}` : `/content/${card.id}`} className="font-medium hover:underline" onPointerDown={(event) => event.stopPropagation()}>{card.title}</Link>
+            <p className="mt-1 text-xs text-zinc-500">{card.is_ticket && <span className="mr-1 rounded bg-brand-50 px-1.5 py-0.5 font-semibold text-brand-800">Ticket</span>}{card.reference_number} · {card.brand?.name}</p>
             <div className="mt-2 flex flex-wrap items-center gap-1">
                 <PriorityBadge priority={card.priority} />
                 <span className="text-xs text-zinc-500">{card.format_label}</span>

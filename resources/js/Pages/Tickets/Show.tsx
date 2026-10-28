@@ -1,6 +1,7 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { ArrowLeft, ExternalLink, Loader2, Pencil } from 'lucide-react';
 import { FormEvent, useState } from 'react';
+import { ShareButton } from '@/Components/ShareButton';
 import { TicketFields, type TicketFormData, type TicketOptions } from '@/Components/TicketForm';
 import { Button, Card, Modal, PriorityBadge, StatusBadge } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
@@ -74,7 +75,12 @@ export default function TicketShow({ ticket, canEdit, startEditing, ...options }
                         <span className="text-xs text-zinc-500">{ticket.format_label}</span>
                     </div>
                 </div>
-                {canEdit && !editing && <Button variant="secondary" onClick={startEdit}><Pencil className="h-4 w-4" /> Edit ticket</Button>}
+                {!editing && (
+                    <div className="flex gap-2">
+                        <ShareButton path={`/tickets/${ticket.id}`} title={ticket.title} kind="Task" />
+                        {canEdit && <Button variant="secondary" onClick={startEdit}><Pencil className="h-4 w-4" /> Edit ticket</Button>}
+                    </div>
+                )}
             </div>
 
             {editing ? (

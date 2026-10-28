@@ -1,6 +1,7 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { FormEvent, useState } from 'react';
 import { Button, Field, Input, PageHeader, PriorityBadge, Select, StatusBadge, Textarea } from '@/Components/ui';
+import { ShareButton } from '@/Components/ShareButton';
 import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
 import { formatBytes, formatDate, withBase } from '@/lib/utils';
@@ -107,8 +108,9 @@ export default function Show({ contentItem, options }: { contentItem: Detail; op
             <PageHeader
                 title={item.title}
                 description={`${item.reference_number} · ${item.brand?.name ?? 'No brand'} · ${item.format_label}`}
-                actions={(item.abilities.update || item.abilities.delete) ? (
+                actions={(
                     <>
+                        <ShareButton path={`/content/${item.id}`} title={item.title} kind="Content idea" />
                         {item.abilities.update && <Link href={`/content/${item.id}/edit`} className="inline-flex h-10 items-center rounded-lg border border-zinc-300 bg-white px-3 text-sm">Edit brief</Link>}
                         {item.abilities.delete && (
                             <Button
@@ -127,7 +129,7 @@ export default function Show({ contentItem, options }: { contentItem: Detail; op
                             </Button>
                         )}
                     </>
-                ) : undefined}
+                )}
             />
             <div className="mb-4 flex flex-wrap items-center gap-2">
                 <StatusBadge status={item.status} />

@@ -35,6 +35,7 @@ class ContentPresenter
             'updated_at' => $item->updated_at?->toIso8601String(),
             'is_overdue' => $item->isOverdue(),
             'complexity' => $item->complexity,
+            'is_ticket' => (bool) $item->is_ticket,
             'brand' => $item->brand ? ['id' => $item->brand->id, 'name' => $item->brand->name] : null,
             'campaign' => $item->campaign ? ['id' => $item->campaign->id, 'name' => $item->campaign->name] : null,
             'status' => $item->status ? $item->status->only(['id', 'name', 'slug', 'color']) : null,

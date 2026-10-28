@@ -60,12 +60,14 @@ export interface SharedProps {
     } | null;
     appName: string;
     basePath: string;
+    facebookAppId?: string;
 }
 
 export interface ContentSummary {
     id: number;
     reference_number: string;
     title: string;
+    is_ticket?: boolean;
     description: string | null;
     format: string;
     format_label: string;

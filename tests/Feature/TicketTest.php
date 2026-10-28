@@ -55,7 +55,11 @@ class TicketTest extends TestCase
 
         $this->actingAs($manager)->get('/board')->assertInertia(fn (Assert $page) => $page
             ->where('cards.0.id', $ticket->id)
-            ->where('cards.0.status.slug', 'ready_for_production'));
+            ->where('cards.0.status.slug', 'ready_for_production')
+            ->where('cards.0.is_ticket', true));
+
+        // Tickets are not content ideas.
+        $this->actingAs($manager)->get('/content')->assertInertia(fn (Assert $page) => $page->where('content.data', []));
 
         $this->actingAs($manager)->get('/tickets')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Tickets/Index')
@@ -112,6 +116,27 @@ class TicketTest extends TestCase
         $this->assertSame([$helper->id], $ticket->collaborators()->pluck('users.id')->all());
         $this->assertTrue(UserNotification::query()->where('user_id', $helper->id)->where('type', 'assigned')->exists());
         $this->actingAs($manager)->get("/tickets/{$ticket->id}/images/{$first}")->assertNotFound();
+    }
+
+    public function test_shared_link_signs_in_then_opens_the_ticket(): void
+    {
+        $brand = $this->makeBrand();
+        $manager = $this->makeUser('marketing_manager', $brand);
+        $lead = $this->makeUser('creative', $brand);
+        $lead->forceFill(['password' => 'secret-pass-123'])->save();
+
+        $this->actingAs($manager)->post('/tickets', [
+            'title' => 'Shared task',
+            'brand_id' => $brand->id,
+            'format' => 'other',
+            'member_ids' => [$lead->id],
+        ])->assertSessionHasNoErrors();
+        $ticket = ContentItem::query()->sole();
+        auth()->logout();
+
+        $this->get("/tickets/{$ticket->id}")->assertRedirect('/login');
+        $this->post('/login', ['email' => $lead->email, 'password' => 'secret-pass-123'])
+            ->assertRedirect("/tickets/{$ticket->id}");
     }
 
     public function test_ticket_needs_a_team_and_a_drive_link(): void

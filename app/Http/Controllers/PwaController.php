@@ -30,6 +30,9 @@ class PwaController extends Controller
             'start_url' => $root.'/dashboard?source=pwa',
             'scope' => $root.'/',
             'display' => 'standalone',
+            // Shared links (e.g. a ticket sent over Messenger) open in the installed app where supported.
+            'handle_links' => 'preferred',
+            'launch_handler' => ['client_mode' => ['navigate-existing', 'auto']],
             'orientation' => 'portrait',
             'background_color' => '#ffffff',
             'theme_color' => '#ffffff',
