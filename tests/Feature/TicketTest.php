@@ -176,6 +176,12 @@ class TicketTest extends TestCase
             ->missing('ticket.team')
             ->where('signedIn', false));
 
+        // Link previews (Messenger, email) see the task title without running JavaScript.
+        $this->get($shareUrl)
+            ->assertSee('<title inertia>Shared task · Task '.$ticket->reference_number.'</title>', false)
+            ->assertSee('<meta property="og:title" content="Shared task · Task '.$ticket->reference_number.'">', false)
+            ->assertSee('<meta property="og:description" content="Shoot the bundle.">', false);
+
         // Tampered or unsigned links are refused, and images stay private.
         $this->get("/share/tickets/{$ticket->id}")->assertForbidden();
         $this->get(str_replace('signature=', 'signature=0', $shareUrl))->assertForbidden();

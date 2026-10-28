@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -106,7 +107,7 @@ class TicketController extends Controller
             'shareUrl' => URL::signedRoute('tickets.shared', $ticket, absolute: false),
             'canEdit' => $request->user()->can('update', $ticket),
             'startEditing' => $request->boolean('edit'),
-        ]);
+        ])->withViewData(['meta' => $this->linkPreview($ticket, $request->fullUrl())]);
     }
 
     /**
@@ -137,7 +138,23 @@ class TicketController extends Controller
                 'has_drive' => $this->driveUrl($ticket) !== null,
             ],
             'signedIn' => $request->user() !== null,
-        ]);
+        ])->withViewData(['meta' => $this->linkPreview($ticket, $request->fullUrl())]);
+    }
+
+    /**
+     * Title and summary for link previews and the browser tab.
+     *
+     * @return array{title: string, description: string, url: string}
+     */
+    private function linkPreview(ContentItem $ticket, string $url): array
+    {
+        $summary = trim(preg_replace('/\s+/', ' ', (string) $ticket->description));
+
+        return [
+            'title' => $ticket->title.' · Task '.$ticket->reference_number,
+            'description' => Str::limit($summary !== '' ? $summary : 'View-only task. Log in to see the full details.', 200),
+            'url' => $url,
+        ];
     }
 
     /** Ticket images are visible to anyone who can see the ticket. */
