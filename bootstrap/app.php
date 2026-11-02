@@ -24,6 +24,10 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        // Anonymous customers order from public pages that can stay open for hours,
+        // so an expired session token must not lose a sale. No signed-in session is involved.
+        $middleware->validateCsrfTokens(except: ['f/*/order']);
+
         $middleware->redirectGuestsTo('/login');
         $middleware->redirectUsersTo('/dashboard');
     })

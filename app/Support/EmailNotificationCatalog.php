@@ -54,6 +54,11 @@ class EmailNotificationCatalog
                 'description' => 'A post is published or scheduled on a brand page you can access.',
                 'types' => ['content_posted', 'facebook_post_published', 'facebook_post_scheduled'],
             ],
+            'funnel_orders' => [
+                'label' => 'New funnel orders',
+                'description' => 'A customer places an order on a funnel for one of your brands.',
+                'types' => ['funnel_order'],
+            ],
             'team' => [
                 'label' => 'New team members',
                 'description' => 'Someone joins the team through an invite link (administrators).',

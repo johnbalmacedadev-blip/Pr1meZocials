@@ -52,6 +52,11 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(30)->by((string) ($request->user()?->id ?: $request->ip()));
         });
 
+        // Generous per address: many Philippine mobile customers share one carrier IP.
+        RateLimiter::for('funnel-orders', function (Request $request) {
+            return Limit::perMinute(20)->by((string) $request->ip());
+        });
+
         RateLimiter::for('exports', function (Request $request) {
             return Limit::perMinute(6)->by((string) ($request->user()?->id ?: $request->ip()));
         });

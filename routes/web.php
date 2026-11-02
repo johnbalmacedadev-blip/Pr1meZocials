@@ -9,6 +9,7 @@ use App\Http\Controllers\ContentItemController;
 use App\Http\Controllers\ContentWorkflowController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EventController;
+use App\Http\Controllers\FunnelController;
 use App\Http\Controllers\InspirationController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\MediaUploadController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\PlatformVersionController;
 use App\Http\Controllers\PostingScheduleController;
 use App\Http\Controllers\SocialPostingController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicFunnelController;
 use App\Http\Controllers\PwaController;
 use App\Http\Controllers\ResourceLinkController;
 use App\Http\Controllers\RolePermissionController;
@@ -40,6 +42,10 @@ Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
 
 // Shared task links open a read-only summary without signing in.
 Route::get('/share/tickets/{ticket}', [TicketController::class, 'shared'])->middleware(['signed:relative', 'throttle:60,1'])->name('tickets.shared');
+
+// Public funnel pages and their order form: customers do not sign in.
+Route::get('/f/{funnel:slug}', [PublicFunnelController::class, 'show'])->name('funnels.public');
+Route::post('/f/{funnel:slug}/order', [PublicFunnelController::class, 'order'])->middleware('throttle:funnel-orders')->name('funnels.public.order');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
@@ -129,6 +135,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/campaigns/{campaign}/edit', [CampaignController::class, 'edit'])->name('campaigns.edit');
     Route::put('/campaigns/{campaign}', [CampaignController::class, 'update'])->name('campaigns.update');
     Route::delete('/campaigns/{campaign}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
+
+    Route::get('/funnels', [FunnelController::class, 'index'])->name('funnels.index');
+    Route::get('/funnels/create', [FunnelController::class, 'create'])->name('funnels.create');
+    Route::post('/funnels', [FunnelController::class, 'store'])->name('funnels.store');
+    Route::get('/funnels/{funnel}', [FunnelController::class, 'show'])->name('funnels.show');
+    Route::get('/funnels/{funnel}/edit', [FunnelController::class, 'edit'])->name('funnels.edit');
+    Route::get('/funnels/{funnel}/orders/export', [FunnelController::class, 'export'])->middleware('throttle:exports')->name('funnels.orders.export');
+    Route::put('/funnels/{funnel}', [FunnelController::class, 'update'])->name('funnels.update');
+    Route::put('/funnels/{funnel}/orders/{order}', [FunnelController::class, 'updateOrder'])->name('funnels.orders.update');
+    Route::delete('/funnels/{funnel}', [FunnelController::class, 'destroy'])->name('funnels.destroy');
 
     Route::get('/team', [TeamController::class, 'index'])->name('team.index');
     Route::post('/team', [TeamController::class, 'store'])->name('team.store');
