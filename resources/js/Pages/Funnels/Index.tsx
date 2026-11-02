@@ -95,14 +95,25 @@ export default function FunnelsIndex({ funnels, canCreate }: { funnels: PageOfFu
                             {funnels.data.map((funnel) => (
                                 <tr key={funnel.id} className="hover:bg-zinc-50">
                                     <td className="px-4 py-3">
-                                        <Link href={`/funnels/${funnel.id}`} className="font-medium text-zinc-900 hover:underline">{funnel.name}</Link>
+                                        <div className="flex items-center gap-2">
+                                            <Link href={`/funnels/${funnel.id}`} className="font-medium text-zinc-900 hover:underline">{funnel.name}</Link>
+                                            {funnel.new_orders_count > 0 && (
+                                                <Link
+                                                    href={`/funnels/${funnel.id}?status=new`}
+                                                    aria-label={`${funnel.new_orders_count} new ${funnel.new_orders_count === 1 ? 'order' : 'orders'}`}
+                                                    title={`${funnel.new_orders_count} new ${funnel.new_orders_count === 1 ? 'order' : 'orders'}`}
+                                                    className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                                                >
+                                                    {funnel.new_orders_count > 99 ? '99+' : funnel.new_orders_count}
+                                                </Link>
+                                            )}
+                                        </div>
                                         <p className="text-xs text-zinc-500">{funnel.product_name}{funnel.brand ? ` · ${funnel.brand}` : ''}</p>
                                     </td>
                                     <td className="px-4 py-3"><FunnelLink url={funnel.public_url} /></td>
                                     <td className="px-4 py-3 whitespace-nowrap">{funnel.price}</td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                         <Link href={`/funnels/${funnel.id}`} className="hover:underline">{funnel.orders_count}</Link>
-                                        {funnel.new_orders_count > 0 && <span className="ml-2 rounded-full bg-brand-700 px-2 py-0.5 text-xs font-medium text-white">{funnel.new_orders_count} new</span>}
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap">{funnel.sales_total}</td>
                                     <td className="px-4 py-3"><FunnelStatus status={funnel.status} /></td>

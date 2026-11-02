@@ -17,6 +17,7 @@ class FunnelPage
     {
         return [
             'ginger-turmeric' => 'Ginger Turmeric sales page',
+            'coffee-20in1' => '20in1 Coffee sales page',
         ];
     }
 
@@ -30,7 +31,7 @@ class FunnelPage
             '{{page_url}}' => e($funnel->publicUrl()),
             '{{order_url}}' => e(route('funnels.public.order', $funnel->slug)),
             '{{price}}' => self::money($funnel->unit_price),
-            '{{compare_price}}' => self::money($funnel->compare_at_price),
+            '{{compare_price}}' => '₱'.number_format((float) $funnel->compare_at_price, 2),
             '{{discount}}' => (string) self::discountPercent($funnel),
         ]);
     }
