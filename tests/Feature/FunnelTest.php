@@ -65,6 +65,24 @@ class FunnelTest extends TestCase
             ->assertDontSee('pancake.vn', false);
     }
 
+    public function test_soap_page_shows_the_promo_regular_price_and_countdown(): void
+    {
+        $this->makeFunnel(['slug' => 'soap', 'template' => 'soap-4in1', 'unit_price' => 320, 'compare_at_price' => 400]);
+
+        $this->get('/f/soap')
+            ->assertOk()
+            ->assertSee('₱320 Only', false)
+            ->assertSee('₱400.00', false)
+            ->assertSee('20% OFF', false)
+            ->assertSee('SPECIAL OFFER ENDS IN', false)
+            ->assertSee('"soap-countdown-top":{"minutes":122,"repeat":true}', false)
+            ->assertSee('funnel-assets/soap-4in1/video/user-1.mp4', false)
+            ->assertDontSee('{{', false);
+
+        $this->postJson('/f/soap/order', $this->orderPayload(['quantity' => 2]))->assertCreated();
+        $this->assertSame('640.00', FunnelOrder::query()->sole()->total);
+    }
+
     public function test_coffee_page_sells_coffee_at_its_own_prices(): void
     {
         $this->makeFunnel(['slug' => 'coffee', 'template' => 'coffee-20in1', 'unit_price' => 580, 'compare_at_price' => 725]);
@@ -180,6 +198,34 @@ class FunnelTest extends TestCase
         $this->actingAs($manager)->post('/funnels', $payload)->assertSessionHasErrors('slug');
         $this->actingAs($manager)->post('/funnels', [...$payload, 'slug' => 'Bad Slug!'])->assertSessionHasErrors('slug');
         $this->actingAs($manager)->post('/funnels', [...$payload, 'slug' => 'cheap', 'compare_at_price' => 100])->assertSessionHasErrors('compare_at_price');
+    }
+
+    public function test_short_link_can_be_added_changed_copied_from_the_table_and_removed(): void
+    {
+        $funnel = $this->makeFunnel();
+        $manager = $this->makeUser('marketing_manager', $funnel->brand);
+        $payload = $funnel->only(['brand_id', 'name', 'product_name', 'slug', 'template', 'status', 'unit_price', 'compare_at_price']);
+        $update = fn (array $changes) => $this->actingAs($manager)->put('/funnels/'.$funnel->id, [...$payload, ...$changes]);
+
+        $update(['short_link' => 'bit.ly/abc123'])->assertSessionDoesntHaveErrors();
+        $this->assertSame('https://bit.ly/abc123', $funnel->fresh()->short_link);
+
+        $this->actingAs($manager)->get('/funnels')->assertInertia(fn (Assert $page) => $page
+            ->where('funnels.data.0.short_link', 'https://bit.ly/abc123')
+            ->where('canUpdate', true));
+        $this->actingAs($manager)->get('/funnels/'.$funnel->id.'/edit')->assertInertia(fn (Assert $page) => $page
+            ->where('funnel.short_link', 'https://bit.ly/abc123'));
+
+        $update(['short_link' => 'https://tinyurl.com/new'])->assertSessionDoesntHaveErrors();
+        $this->assertSame('https://tinyurl.com/new', $funnel->fresh()->short_link);
+
+        // It is shown as a clickable link, so only web addresses are accepted.
+        $update(['short_link' => 'javascript:alert(1)'])->assertSessionHasErrors('short_link');
+        $update(['short_link' => 'not a link'])->assertSessionHasErrors('short_link');
+        $this->assertSame('https://tinyurl.com/new', $funnel->fresh()->short_link);
+
+        $update(['short_link' => ''])->assertSessionDoesntHaveErrors();
+        $this->assertNull($funnel->fresh()->short_link);
     }
 
     public function test_deleted_funnel_link_stops_working_and_keeps_its_slug(): void

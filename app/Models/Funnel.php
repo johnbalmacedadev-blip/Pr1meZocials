@@ -19,6 +19,7 @@ class Funnel extends Model
         'name',
         'product_name',
         'slug',
+        'short_link',
         'template',
         'status',
         'unit_price',

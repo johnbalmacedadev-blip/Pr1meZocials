@@ -36,6 +36,7 @@ class FunnelController extends Controller
                 'brand' => $funnel->brand?->name,
                 'status' => $funnel->status,
                 'public_url' => $funnel->publicUrl(),
+                'short_link' => $funnel->short_link,
                 'price' => FunnelPage::money($funnel->unit_price),
                 'orders_count' => $funnel->orders_count,
                 'new_orders_count' => $funnel->new_orders_count,
@@ -46,6 +47,7 @@ class FunnelController extends Controller
         return Inertia::render('Funnels/Index', [
             'funnels' => $funnels,
             'canCreate' => $request->user()->can('create', Funnel::class),
+            'canUpdate' => $request->user()->hasPermission('funnels.update'),
         ]);
     }
 
@@ -106,6 +108,7 @@ class FunnelController extends Controller
                 'product_name' => $funnel->product_name,
                 'status' => $funnel->status,
                 'public_url' => $funnel->publicUrl(),
+                'short_link' => $funnel->short_link,
                 'price' => FunnelPage::money($funnel->unit_price),
                 'compare_price' => FunnelPage::money($funnel->compare_at_price),
             ],
@@ -122,7 +125,7 @@ class FunnelController extends Controller
         $this->authorize('update', $funnel);
 
         return Inertia::render('Funnels/Form', [
-            'funnel' => $funnel->only(['id', 'brand_id', 'name', 'product_name', 'slug', 'template', 'status', 'unit_price', 'compare_at_price']),
+            'funnel' => $funnel->only(['id', 'brand_id', 'name', 'product_name', 'slug', 'short_link', 'template', 'status', 'unit_price', 'compare_at_price']),
             'options' => $this->options($request),
         ]);
     }
@@ -221,18 +224,27 @@ class FunnelController extends Controller
      */
     private function validated(Request $request, ?Funnel $funnel = null): array
     {
+        // People often paste a short link without https://, as in bit.ly/abc123.
+        $shortLink = trim((string) $request->input('short_link'));
+        if ($shortLink !== '' && ! preg_match('#^[a-z][a-z0-9+.-]*:#i', $shortLink)) {
+            $shortLink = 'https://'.$shortLink;
+        }
+        $request->merge(['short_link' => $shortLink === '' ? null : $shortLink]);
+
         $data = $request->validate([
             'brand_id' => ['required', 'integer', Rule::in($request->user()->accessibleBrandIds())],
             'name' => ['required', 'string', 'max:150'],
             'product_name' => ['required', 'string', 'max:150'],
             // Deleted funnels keep their slug so an old ad link can never open a different product.
             'slug' => ['required', 'string', 'max:100', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', Rule::unique('funnels', 'slug')->ignore($funnel?->id)],
+            'short_link' => ['nullable', 'string', 'max:255', 'url:http,https'],
             'template' => ['required', Rule::in(array_keys(FunnelPage::templates()))],
             'status' => ['required', Rule::in(Funnel::STATUSES)],
             'unit_price' => ['required', 'numeric', 'min:1', 'max:9999999'],
             'compare_at_price' => ['required', 'numeric', 'gt:unit_price', 'max:9999999'],
         ], [
             'slug.regex' => 'Use lowercase letters, numbers and dashes only.',
+            'short_link.url' => 'Enter a full link, for example https://bit.ly/abc123.',
             'compare_at_price.gt' => 'The regular price must be higher than the promo price.',
         ]);
 
