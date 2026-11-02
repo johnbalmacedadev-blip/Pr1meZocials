@@ -11,6 +11,7 @@ interface FunnelRow {
     brand: string | null;
     status: string;
     public_url: string;
+    short_link: string | null;
     price: string;
     orders_count: number;
     new_orders_count: number;
@@ -37,7 +38,7 @@ export function FunnelStatus({ status }: { status: string }) {
     return <Badge className={`capitalize ${statusTone[status] ?? statusTone.draft}`}>{status}</Badge>;
 }
 
-export function FunnelLink({ url }: { url: string }) {
+export function FunnelLink({ url, compact = false }: { url: string; compact?: boolean }) {
     const [copied, setCopied] = useState(false);
 
     async function copy() {
@@ -53,17 +54,17 @@ export function FunnelLink({ url }: { url: string }) {
     return (
         <div className="flex min-w-0 items-center gap-1.5">
             <a href={url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 text-sm text-brand-700 hover:underline">
-                <span className="max-w-72 truncate">{url.replace(/^https?:\/\//, '')}</span>
+                <span className={`${compact ? 'max-w-44' : 'max-w-72'} truncate`}>{url.replace(/^https?:\/\//, '')}</span>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             </a>
-            <button type="button" onClick={copy} aria-label="Copy link" title="Copy link" className="shrink-0 rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800">
+            <button type="button" onClick={copy} aria-label={`Copy ${url}`} title="Copy link" className="shrink-0 rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800">
                 {copied ? <Check className="h-3.5 w-3.5 text-emerald-700" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
         </div>
     );
 }
 
-export default function FunnelsIndex({ funnels, canCreate }: { funnels: PageOfFunnels; canCreate: boolean }) {
+export default function FunnelsIndex({ funnels, canCreate, canUpdate }: { funnels: PageOfFunnels; canCreate: boolean; canUpdate: boolean }) {
     return (
         <AppLayout>
             <Head title="Funnels" />
@@ -80,11 +81,12 @@ export default function FunnelsIndex({ funnels, canCreate }: { funnels: PageOfFu
                 />
             ) : (
                 <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-                    <table className="w-full min-w-[820px] text-left text-sm">
+                    <table className="w-full min-w-[1000px] text-left text-sm">
                         <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500">
                             <tr>
                                 <th className="px-4 py-3 font-medium">Funnel</th>
                                 <th className="px-4 py-3 font-medium">Link</th>
+                                <th className="px-4 py-3 font-medium">Short link</th>
                                 <th className="px-4 py-3 font-medium">Price</th>
                                 <th className="px-4 py-3 font-medium">Orders</th>
                                 <th className="px-4 py-3 font-medium">Sales</th>
@@ -110,7 +112,14 @@ export default function FunnelsIndex({ funnels, canCreate }: { funnels: PageOfFu
                                         </div>
                                         <p className="text-xs text-zinc-500">{funnel.product_name}{funnel.brand ? ` · ${funnel.brand}` : ''}</p>
                                     </td>
-                                    <td className="px-4 py-3"><FunnelLink url={funnel.public_url} /></td>
+                                    <td className="px-4 py-3"><FunnelLink url={funnel.public_url} compact /></td>
+                                    <td className="px-4 py-3">
+                                        {funnel.short_link
+                                            ? <FunnelLink url={funnel.short_link} compact />
+                                            : canUpdate
+                                                ? <Link href={`/funnels/${funnel.id}/edit`} className="text-sm font-medium text-brand-700 hover:underline">Add short link</Link>
+                                                : <span className="text-zinc-400">—</span>}
+                                    </td>
                                     <td className="px-4 py-3 whitespace-nowrap">{funnel.price}</td>
                                     <td className="px-4 py-3 whitespace-nowrap">
                                         <Link href={`/funnels/${funnel.id}`} className="hover:underline">{funnel.orders_count}</Link>

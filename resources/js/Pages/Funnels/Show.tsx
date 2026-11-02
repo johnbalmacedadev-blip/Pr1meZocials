@@ -21,7 +21,7 @@ interface OrderRow {
 }
 
 interface Props {
-    funnel: { id: number; name: string; product_name: string; status: string; public_url: string; price: string; compare_price: string };
+    funnel: { id: number; name: string; product_name: string; status: string; public_url: string; short_link: string | null; price: string; compare_price: string };
     orders: { data: OrderRow[]; prev_page_url: string | null; next_page_url: string | null; from: number | null; to: number | null; total: number };
     filters: { status: string; q: string };
     statuses: string[];
@@ -75,6 +75,7 @@ export default function FunnelShow({ funnel, orders, filters, statuses, canManag
             <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-zinc-200 bg-white p-4">
                 <FunnelStatus status={funnel.status} />
                 <FunnelLink url={funnel.public_url} />
+                {funnel.short_link && <FunnelLink url={funnel.short_link} />}
             </div>
 
             <div className="mb-4 flex flex-wrap items-center gap-2">

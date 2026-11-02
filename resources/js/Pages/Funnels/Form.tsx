@@ -10,6 +10,7 @@ interface FunnelData {
     name: string;
     product_name: string;
     slug: string;
+    short_link: string | null;
     template: string;
     status: string;
     unit_price: string;
@@ -33,6 +34,7 @@ export default function FunnelForm({ funnel, options }: { funnel: FunnelData | n
         name: funnel?.name ?? '',
         product_name: funnel?.product_name ?? '',
         slug: funnel?.slug ?? '',
+        short_link: funnel?.short_link ?? '',
         template: funnel?.template ?? options.templates[0]?.key ?? '',
         status: funnel?.status ?? 'active',
         unit_price: funnel?.unit_price ?? '',
@@ -81,6 +83,9 @@ export default function FunnelForm({ funnel, options }: { funnel: FunnelData | n
                 </div>
                 <Field label="Link" hint={`Customers open ${basePath}/f/${form.data.slug || 'your-link'}`} error={form.errors.slug}>
                     <Input value={form.data.slug} onChange={(e) => form.setData('slug', e.target.value)} required />
+                </Field>
+                <Field label="Short link" hint="Optional. Paste the short link you made for this funnel, for example from Bitly. Clear it to remove." error={form.errors.short_link}>
+                    <Input value={form.data.short_link} onChange={(e) => form.setData('short_link', e.target.value)} placeholder="https://bit.ly/your-link" />
                 </Field>
                 <div className="grid gap-4 md:grid-cols-2">
                     <Field label="Sales page" hint="The page design and wording come from this template." error={form.errors.template}>
