@@ -13,6 +13,7 @@ class FunnelOrder extends Model
         'funnel_id',
         'full_name',
         'phone',
+        'email',
         'address',
         'province',
         'city',

@@ -415,6 +415,7 @@
                 body: JSON.stringify({
                     full_name: field('full_name'),
                     phone_number: field('phone_number'),
+                    email: field('email'),
                     address: field('address'),
                     province: selectedText(form.querySelector('select[name="province_id"]')),
                     city: selectedText(form.querySelector('select[name="district_id"]')),

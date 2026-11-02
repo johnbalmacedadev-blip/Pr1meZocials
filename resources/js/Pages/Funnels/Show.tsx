@@ -12,6 +12,7 @@ interface OrderRow {
     reference: string;
     full_name: string;
     phone: string;
+    email: string | null;
     address: string;
     quantity: number;
     total: string;
@@ -80,7 +81,7 @@ export default function FunnelShow({ funnel, orders, filters, statuses, canManag
 
             <div className="mb-4 flex flex-wrap items-center gap-2">
                 <form onSubmit={submitSearch} className="flex gap-2">
-                    <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or mobile" className="w-56" />
+                    <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, mobile or email" className="w-64" />
                     <Button type="submit" variant="secondary">Search</Button>
                 </form>
                 <Select value={filters.status} onChange={(e) => applyFilters({ status: e.target.value })} className="w-40" aria-label="Filter by status">
@@ -117,7 +118,8 @@ export default function FunnelShow({ funnel, orders, filters, statuses, canManag
                                     </td>
                                     <td className="px-4 py-3">
                                         <p className="font-medium text-zinc-900">{order.full_name}</p>
-                                        <a href={`tel:${order.phone}`} className="text-brand-700 hover:underline">{order.phone}</a>
+                                        <a href={`tel:${order.phone}`} className="block text-brand-700 hover:underline">{order.phone}</a>
+                                        {order.email && <a href={`mailto:${order.email}`} className="block break-all text-brand-700 hover:underline">{order.email}</a>}
                                     </td>
                                     <td className="max-w-80 px-4 py-3 text-zinc-700">{order.address}</td>
                                     <td className="px-4 py-3">{order.quantity}</td>

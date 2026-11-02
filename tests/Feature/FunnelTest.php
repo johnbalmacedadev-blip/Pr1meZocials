@@ -140,9 +140,42 @@ class FunnelTest extends TestCase
         $this->assertContains('f/*/order', $this->app->make(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class)->getExcludedPaths());
     }
 
+    public function test_email_is_optional_but_saved_and_listed_when_given(): void
+    {
+        $funnel = $this->makeFunnel();
+        $manager = $this->makeUser('marketing_manager', $funnel->brand);
+
+        $this->postJson('/f/ginger/order', $this->orderPayload(['email' => '']))->assertCreated();
+        $this->assertNull(FunnelOrder::query()->sole()->email);
+
+        $this->postJson('/f/ginger/order', $this->orderPayload(['phone_number' => '09171112222', 'email' => 'maria@example.com']))->assertCreated();
+
+        $this->actingAs($manager)->get('/funnels/'.$funnel->id.'?q=maria@example')->assertInertia(fn (Assert $page) => $page
+            ->has('orders.data', 1)
+            ->where('orders.data.0.email', 'maria@example.com'));
+        $csv = $this->actingAs($manager)->get('/funnels/'.$funnel->id.'/orders/export')->streamedContent();
+        $this->assertStringContainsString('Email', $csv);
+        $this->assertStringContainsString('maria@example.com', $csv);
+    }
+
+    public function test_every_order_form_asks_for_email_and_complete_address(): void
+    {
+        foreach (array_keys(\App\Support\FunnelPage::templates()) as $template) {
+            $this->makeFunnel(['slug' => $template, 'template' => $template]);
+
+            $this->get('/f/'.$template)
+                ->assertOk()
+                ->assertSee('Delivery address', false)
+                ->assertSee('Complete Address', false)
+                ->assertSee('name="email"', false);
+        }
+    }
+
     public function test_invalid_orders_are_rejected(): void
     {
         $this->makeFunnel();
+
+        $this->postJson('/f/ginger/order', $this->orderPayload(['email' => 'not-an-email']))->assertJsonValidationErrors('email');
 
         $this->postJson('/f/ginger/order', $this->orderPayload(['phone_number' => '12345']))->assertJsonValidationErrors('phone_number');
         $this->postJson('/f/ginger/order', $this->orderPayload(['quantity' => 0]))->assertJsonValidationErrors('quantity');

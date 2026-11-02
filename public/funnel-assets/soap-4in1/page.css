@@ -103,6 +103,7 @@ h2 { font-size: 26px; font-weight: 800; line-height: 1.2; margin-bottom: 18px; }
 .popup-image { display: block; width: 62%; height: auto; margin: 10px auto; }
 .popup-summary { padding: 10px 14px 0; font-size: 14px; text-align: center; }
 .order-form { position: relative; display: grid; gap: 9px; padding: 12px 14px 16px; }
+.field-caption { margin: 2px 0 -4px; color: #2d2d2d; font-size: 15px; font-weight: 700; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .order-form input, .order-form select { display: block; width: 100%; height: 42px; padding: 0 10px; border: 2px solid #dfdfdf; border-radius: 6px; background: #f2f2f2; color: #2d2d2d; font: inherit; font-size: 16px; outline: 0; }
 .order-form input:focus, .order-form select:focus { border-color: #0a2f7c; }
