@@ -65,6 +65,26 @@ class FunnelTest extends TestCase
             ->assertDontSee('pancake.vn', false);
     }
 
+    public function test_coffee_page_sells_coffee_at_its_own_prices(): void
+    {
+        $this->makeFunnel(['slug' => 'coffee', 'template' => 'coffee-20in1', 'unit_price' => 580, 'compare_at_price' => 725]);
+
+        $this->get('/f/coffee')
+            ->assertOk()
+            ->assertSee('Order 1 Prime C 20 in 1 Coffee', false)
+            ->assertSee('₱580 Only', false)
+            ->assertSee('₱725.00', false)
+            ->assertSee('20% OFF', false)
+            ->assertSee('Pr1me C 20in1', false)
+            ->assertSee('funnel-assets/coffee-20in1/video/hero.mp4', false)
+            ->assertDontSee('Ginger', false)
+            ->assertDontSee('{{', false)
+            ->assertDontSee('pancake.vn', false);
+
+        $this->postJson('/f/coffee/order', $this->orderPayload(['quantity' => 3]))->assertCreated();
+        $this->assertSame('1740.00', FunnelOrder::query()->sole()->total);
+    }
+
     public function test_draft_and_paused_funnels_are_hidden_from_customers_but_previewable_by_the_team(): void
     {
         $funnel = $this->makeFunnel(['status' => 'draft']);
