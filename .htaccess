@@ -25,6 +25,7 @@ DirectoryIndex index.php
     RewriteRule ^build/(.*)$ public/build/$1 [L]
     RewriteRule ^storage/(.*)$ public/storage/$1 [L]
     RewriteRule ^brand/(.*)$ public/brand/$1 [L]
+    RewriteRule ^funnel-assets/(.*)$ public/funnel-assets/$1 [L]
     RewriteRule ^favicon\.ico$ public/favicon.ico [L]
 
     # App routes through the root front controller so SCRIPT_NAME stays

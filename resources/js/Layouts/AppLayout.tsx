@@ -1,7 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import {
-    BarChart3, Bell, CalendarDays, CalendarHeart, Columns3, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, MessageCircle, MoreHorizontal, Plus, Search, Send, Settings, Sparkles, CalendarRange, Ticket,
+    BarChart3, Bell, CalendarDays, CalendarHeart, Columns3, Filter, FolderOpen, LayoutDashboard, Lightbulb, LogOut, Megaphone, MessageCircle, MoreHorizontal, Plus, Search, Send, Settings, Sparkles, CalendarRange, Ticket,
     UserRound, Users, X,
 } from 'lucide-react';
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
@@ -26,6 +26,7 @@ const nav = [
     { href: '/posting-schedule', label: 'Posting Schedule', icon: CalendarRange, show: (can: Can) => can('posting_schedule.view') || can('content.view') || can('content.view.any') },
     { href: '/posting', label: 'Posting', icon: Send, show: (can: Can) => can('posting.view') || can('posting.create') || can('content.publish') },
     { href: '/campaigns', label: 'Campaigns', icon: Megaphone, show: (can: Can) => can('campaigns.view') },
+    { href: '/funnels', label: 'Funnels', icon: Filter, show: (can: Can) => can('funnels.view') },
     { href: '/team', label: 'Team', icon: Users, show: (can: Can) => can('team.view') },
     { href: '/performance', label: 'Performance', icon: BarChart3, show: (can: Can) => can('performance.view') || can('reports.view') },
     { href: '/messenger', label: 'Messenger', icon: MessageCircle, show: () => true },
