@@ -19,6 +19,7 @@ class FunnelPage
             'ginger-turmeric' => 'Ginger Turmeric sales page',
             'coffee-20in1' => '20in1 Coffee sales page',
             'soap-4in1' => 'Pr1me Skin Soap sales page',
+            'cleanse' => 'Pr1me Cleanse sales page',
         ];
     }
 
