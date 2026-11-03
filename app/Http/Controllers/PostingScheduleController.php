@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ContentItem;
+use App\Models\PostingPlanSlot;
 use App\Models\PostingScheduleEntry;
 use App\Models\SocialPost;
 use App\Models\User;
@@ -98,6 +99,8 @@ class PostingScheduleController extends Controller
         return Inertia::render('Schedule/Posting', [
             'canAssign' => $this->canAssign($user),
             'canPost' => $user->hasPermission('content.publish'),
+            'canEditPlan' => $user->hasPermission('posting_schedule.create'),
+            'plan' => $this->plan(),
             'week' => [
                 'start' => $week['start'],
                 'end' => $week['end'],
@@ -175,6 +178,20 @@ class PostingScheduleController extends Controller
         return back()->with('success', 'Content added to the schedule.');
     }
 
+    public function updatePlanSlot(Request $request, PostingPlanSlot $planSlot): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('posting_schedule.create'), 403);
+
+        $data = $request->validate([
+            'title' => ['required', 'string', 'max:80'],
+            'format' => ['required', Rule::in(PostingPlanSlot::FORMATS)],
+        ]);
+
+        $planSlot->update([...$data, 'updated_by' => $request->user()->id]);
+
+        return back()->with('success', 'Schedule updated to "'.$planSlot->title.'".');
+    }
+
     public function destroy(Request $request, PostingScheduleEntry $entry): RedirectResponse
     {
         $this->authorize('viewAny', ContentItem::class);
@@ -183,6 +200,25 @@ class PostingScheduleController extends Controller
         $entry->delete();
 
         return back()->with('success', 'Content removed from the schedule.');
+    }
+
+    /**
+     * The weekly plan, one row per day with its four slots.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function plan(): array
+    {
+        $slots = PostingPlanSlot::query()->get()->groupBy('weekday');
+
+        return collect(array_keys(self::WEEKDAYS))->map(function (string $weekday) use ($slots) {
+            $row = ['name' => ucfirst($weekday)];
+            foreach ($slots->get($weekday, []) as $slot) {
+                $row[$slot->slot] = $slot->only(['id', 'format', 'title']);
+            }
+
+            return $row;
+        })->all();
     }
 
     private function canAssign(User $user): bool

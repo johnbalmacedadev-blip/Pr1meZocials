@@ -126,6 +126,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/event-occurrences/{occurrence}/media/{type}', [EventController::class, 'media'])->where('type', 'poster|video')->name('events.occurrences.media');
     Route::get('/posting-schedule', [PostingScheduleController::class, 'index'])->name('posting-schedule');
     Route::post('/posting-schedule', [PostingScheduleController::class, 'store'])->name('posting-schedule.store');
+    Route::put('/posting-schedule/plan/{planSlot}', [PostingScheduleController::class, 'updatePlanSlot'])->name('posting-schedule.plan.update');
     Route::delete('/posting-schedule/{entry}', [PostingScheduleController::class, 'destroy'])->name('posting-schedule.destroy');
 
     Route::get('/campaigns', [CampaignController::class, 'index'])->name('campaigns.index');
