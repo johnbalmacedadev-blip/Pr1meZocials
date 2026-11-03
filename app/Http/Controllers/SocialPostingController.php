@@ -12,6 +12,7 @@ use App\Services\FacebookPublisher;
 use App\Services\NotificationService;
 use App\Services\TikTokPublisher;
 use App\Support\FacebookCredentials;
+use App\Support\PhilippineTime;
 use App\Support\PostingScheduleSlots;
 use App\Support\TikTokCredentials;
 use Illuminate\Http\RedirectResponse;
@@ -513,8 +514,9 @@ class SocialPostingController extends Controller
                 Rule::requiredIf($request->input('publish_mode') === 'schedule'),
                 'nullable',
                 'date',
-                'after:'.now()->addMinutes(9)->toDateTimeString(),
-                'before:'.now()->addDays(75)->toDateTimeString(),
+                // Both sides are Philippine clock times, as typed by the team.
+                'after:'.PhilippineTime::now()->addMinutes(9)->toDateTimeString(),
+                'before:'.PhilippineTime::now()->addDays(75)->toDateTimeString(),
             ],
             // A video sent in chunks via /posting/uploads arrives as an upload id instead of a file.
             'upload_id' => ['nullable', 'uuid'],
@@ -592,7 +594,7 @@ class SocialPostingController extends Controller
         }
 
         $scheduleAt = $data['publish_mode'] === 'schedule'
-            ? Carbon::parse($data['scheduled_publish_at'])
+            ? PhilippineTime::parse($data['scheduled_publish_at'])
             : null;
 
         if ($files !== [] || $uploadId !== null) {
@@ -665,7 +667,7 @@ class SocialPostingController extends Controller
         $pageName = $account->name;
         $scheduled = $published->status === 'scheduled';
         $message = $scheduled
-            ? 'Scheduled on Facebook for '.$pageName.' at '.$published->scheduled_publish_at?->timezone(config('app.timezone'))->format('M j, Y g:i A').'. Facebook will publish it.'
+            ? 'Scheduled on Facebook for '.$pageName.' at '.$published->scheduled_publish_at?->copy()->setTimezone(PhilippineTime::ZONE)->format('M j, Y g:i A').' Philippine time. Facebook will publish it.'
             : 'Posted to '.$pageName.' on Facebook.';
 
         $alsoTikTok = $request->boolean('also_post_tiktok') && $data['media_type'] === 'video';
@@ -723,7 +725,7 @@ class SocialPostingController extends Controller
                 'content_posted',
                 $scheduled ? 'New post scheduled on '.$pageName : 'New post on '.$pageName,
                 $request->user()->name.($scheduled
-                    ? ' scheduled a Facebook post for '.$published->scheduled_publish_at?->timezone(config('app.timezone'))->format('M j, Y g:i A').'.'
+                    ? ' scheduled a Facebook post for '.$published->scheduled_publish_at?->copy()->setTimezone(PhilippineTime::ZONE)->format('M j, Y g:i A').' Philippine time.'
                     : ' posted to '.$pageName.' on Facebook.')
                     .($caption !== '' ? ' "'.$caption.'"' : ''),
                 'content-posted:'.$published->id,
@@ -787,6 +789,33 @@ class SocialPostingController extends Controller
         }
 
         return back()->with('success', 'Post caption updated on Facebook.');
+    }
+
+    /**
+     * Moves a published post on the team's calendars. Facebook keeps the real date.
+     */
+    public function updateCalendarDate(Request $request, SocialPost $post): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('content.publish'), 403);
+        $post->load('account');
+        abort_unless($post->account && $request->user()->canAccessBrand($post->account->brand_id), 403);
+        abort_unless($request->user()->canAccessSocialAccount($post->account->id), 403);
+
+        if ($post->status !== 'published') {
+            throw ValidationException::withMessages(['calendar_at' => 'Only published posts can be moved on the calendar.']);
+        }
+
+        $data = $request->validate([
+            'calendar_at' => ['nullable', 'date_format:Y-m-d\TH:i'],
+        ], [
+            'calendar_at.date_format' => 'Choose a valid date and time.',
+        ]);
+
+        $post->update(['calendar_at' => filled($data['calendar_at'] ?? null) ? PhilippineTime::parse($data['calendar_at']) : null]);
+
+        return back()->with('success', $post->calendar_at
+            ? 'Moved on the calendar to '.PhilippineTime::of($post->calendar_at)->format('M j, Y g:i A').'. The date on Facebook stays the same.'
+            : 'Back on the date it was really posted.');
     }
 
     public function destroy(Request $request, SocialPost $post): RedirectResponse
@@ -869,6 +898,7 @@ class SocialPostingController extends Controller
             'engagement_rate' => $post->engagement_rate,
             'metrics_synced_at' => $post->metrics_synced_at?->toIso8601String(),
             'published_at' => $post->published_at?->toIso8601String(),
+            'calendar_at' => $post->calendar_at?->toIso8601String(),
             'scheduled_publish_at' => $post->scheduled_publish_at?->toIso8601String(),
             'page' => $post->account?->only(['id', 'name', 'external_id']),
             'author' => $post->user?->only(['id', 'name']),
@@ -913,7 +943,7 @@ class SocialPostingController extends Controller
         $scheduledAt = null;
         if ($date !== '' && $time !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && preg_match('/^\d{2}:\d{2}$/', $time)) {
             try {
-                $when = Carbon::createFromFormat('Y-m-d H:i', $date.' '.$time);
+                $when = Carbon::createFromFormat('Y-m-d H:i', $date.' '.$time, PhilippineTime::ZONE);
                 $min = now()->addMinutes(10);
                 if ($when->lt($min)) {
                     $when = $when->addWeek();

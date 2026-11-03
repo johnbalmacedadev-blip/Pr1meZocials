@@ -177,6 +177,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/posting/pages/{account}', [SocialPostingController::class, 'updatePage'])->name('posting.pages.update');
     Route::post('/posting/{post}/sync', [SocialPostingController::class, 'sync'])->name('posting.sync');
     Route::put('/posting/{post}', [SocialPostingController::class, 'update'])->name('posting.update');
+    Route::put('/posting/{post}/calendar-date', [SocialPostingController::class, 'updateCalendarDate'])->name('posting.calendar-date');
     Route::delete('/posting/{post}', [SocialPostingController::class, 'destroy'])->name('posting.destroy');
 
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');

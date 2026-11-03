@@ -2,10 +2,11 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { CalendarClock, ChevronLeft, ChevronRight, Clapperboard, GalleryHorizontal, Image as ImageIcon, Megaphone, Moon, Pencil, Plus, Repeat2, Sun, SunMedium, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import FacebookGlyph from '@/Components/FacebookGlyph';
+import { PostCalendarDateModal, type MovablePost } from '@/Components/PostCalendarDateModal';
 import { Button, Field, Input, Modal, Select } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { confirmAction } from '@/lib/confirm';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatDateTime, philippineInputValue } from '@/lib/utils';
 
 type Format = 'poster' | 'reel' | 'carousel' | 'image' | 'reel_poster' | 'ugc';
 
@@ -93,6 +94,8 @@ interface FacebookSchedulePost {
     slot: string;
     date: string;
     at: string;
+    published_at: string | null;
+    moved: boolean;
     caption: string;
     media_type: 'image' | 'video';
     media_name: string | null;
@@ -211,7 +214,7 @@ export default function PostingSchedule({
                         <div className="min-w-0 flex-1 text-center sm:min-w-[12rem] sm:flex-none">
                             <p className="text-sm font-semibold text-zinc-900">{week.label}</p>
                             {!week.is_current && (
-                                <button type="button" className="mt-0.5 text-xs font-medium text-brand-700 hover:underline" onClick={() => goToWeek(new Date().toISOString().slice(0, 10))}>
+                                <button type="button" className="mt-0.5 text-xs font-medium text-brand-700 hover:underline" onClick={() => goToWeek(philippineInputValue(new Date()).slice(0, 10))}>
                                     Jump to this week
                                 </button>
                             )}
@@ -395,6 +398,7 @@ function SlotPlan({
     const posts = facebookPosts.filter((post) => post.weekday === weekday && post.slot === slot && post.date === dayDate);
     const filled = planned.length > 0 || posts.length > 0;
     const label = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${slot === 'flex' ? 'flex slot' : slot}`;
+    const [moving, setMoving] = useState<MovablePost | null>(null);
 
     function openCompose() {
         const time = SLOT_TIMES[slot] ?? '12:00';
@@ -451,7 +455,7 @@ function SlotPlan({
                                 onClick={() => router.visit(`/posting?tab=history&post=${post.id}`)}
                             >
                                 <p className="text-[11px] font-semibold text-brand-700">
-                                    {formatDate(post.at)} · {post.status === 'scheduled' ? 'Scheduled' : 'Posted'}
+                                    {formatDateTime(post.at)} · {post.status === 'scheduled' ? 'Scheduled' : post.moved ? 'Posted · moved' : 'Posted'}
                                 </p>
                                 <p className="truncate text-sm font-medium text-zinc-900">{post.caption || 'Facebook post'}</p>
                                 <p className="truncate text-[11px] text-zinc-500">
@@ -461,10 +465,10 @@ function SlotPlan({
                             <div className="mt-1 flex items-center gap-1">
                                 <button
                                     type="button"
-                                    aria-label="View and edit in history"
-                                    title="View and edit in history"
+                                    aria-label={post.status === 'published' && canPost ? 'Change calendar date' : 'View and edit in history'}
+                                    title={post.status === 'published' && canPost ? 'Change calendar date' : 'View and edit in history'}
                                     className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
-                                    onClick={() => router.visit(`/posting?tab=history&post=${post.id}`)}
+                                    onClick={() => (post.status === 'published' && canPost ? setMoving(post) : router.visit(`/posting?tab=history&post=${post.id}`))}
                                 >
                                     <Pencil className="h-3.5 w-3.5" />
                                 </button>
@@ -517,6 +521,7 @@ function SlotPlan({
                     ))}
                 </ul>
             )}
+            <PostCalendarDateModal post={moving} onClose={() => setMoving(null)} />
         </>
     );
 }

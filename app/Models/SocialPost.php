@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\PhilippineTime;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -30,6 +33,7 @@ class SocialPost extends Model
         'engagement_rate',
         'metrics_synced_at',
         'published_at',
+        'calendar_at',
         'scheduled_publish_at',
     ];
 
@@ -45,8 +49,36 @@ class SocialPost extends Model
             'engagement_rate' => 'float',
             'metrics_synced_at' => 'datetime',
             'published_at' => 'datetime',
+            'calendar_at' => 'datetime',
             'scheduled_publish_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Where this post shows on calendars, in Philippine time.
+     */
+    public function calendarTime(): ?CarbonInterface
+    {
+        $at = $this->calendar_at ?? $this->scheduled_publish_at ?? $this->published_at;
+
+        return $at ? PhilippineTime::of($at) : null;
+    }
+
+    /**
+     * Posts that show on calendars between two UTC moments.
+     */
+    public function scopeOnCalendarBetween(Builder $query, CarbonInterface $startUtc, CarbonInterface $endUtc): void
+    {
+        $query->where(function (Builder $query) use ($startUtc, $endUtc) {
+            $query->where(function (Builder $scheduled) use ($startUtc, $endUtc) {
+                $scheduled->where('status', 'scheduled')->whereBetween('scheduled_publish_at', [$startUtc, $endUtc]);
+            })->orWhere(function (Builder $published) use ($startUtc, $endUtc) {
+                $published->where('status', 'published')->where(function (Builder $when) use ($startUtc, $endUtc) {
+                    $when->whereBetween('calendar_at', [$startUtc, $endUtc])
+                        ->orWhere(fn (Builder $real) => $real->whereNull('calendar_at')->whereBetween('published_at', [$startUtc, $endUtc]));
+                });
+            });
+        });
     }
 
     /**

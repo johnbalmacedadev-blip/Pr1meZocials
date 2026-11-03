@@ -533,7 +533,7 @@ class SocialPostingTest extends TestCase
         ]);
         $manager->socialAccounts()->sync([$account->id]);
 
-        $scheduleAt = now()->addHours(2);
+        $scheduleAt = \App\Support\PhilippineTime::now()->addHours(2);
 
         Http::fake([
             'graph.facebook.com/*/photos' => Http::response(['id' => 'photo9', 'post_id' => '111222333_777'], 200),
