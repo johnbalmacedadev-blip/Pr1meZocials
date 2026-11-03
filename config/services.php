@@ -28,9 +28,8 @@ return [
         'key' => env('RESEND_KEY'),
     ],
 
-    'gemini' => [
-        'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com'),
-        'image_model' => env('GEMINI_IMAGE_MODEL', 'gemini-nano-banana-2.1'),
+    'google_flow' => [
+        'url' => env('GOOGLE_FLOW_URL', 'https://flow.google.com/'),
     ],
 
     'slack' => [

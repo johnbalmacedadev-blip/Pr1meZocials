@@ -1,7 +1,7 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { Check, Download, ImagePlus, Loader2, Pencil, RefreshCw, Trash2, Unplug, Wand2, X } from 'lucide-react';
-import { ChangeEvent, FormEvent, useRef, useState } from 'react';
-import { Button, Card, EmptyState, Field, Input, PageHeader, Pagination, Select, Textarea } from '@/Components/ui';
+import { Check, Copy, Download, ExternalLink, ImagePlus, Loader2, Pencil, RefreshCw, Trash2, Upload, Wand2, X } from 'lucide-react';
+import { ChangeEvent, DragEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { Button, Card, EmptyState, Field, PageHeader, Pagination, Select, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatDateTime } from '@/lib/utils';
 import type { SharedProps } from '@/types';
@@ -11,17 +11,19 @@ interface ReferenceImage {
     id: number | null;
     name: string;
     url: string;
+    filename: string;
 }
 
 interface Generation {
     id: number;
     parent_id: number | null;
+    parent_url: string | null;
     prompt: string;
     aspect_ratio: string;
-    image_size: string;
     references: string[];
     url: string;
     download_url: string;
+    filename: string;
     width: number | null;
     height: number | null;
     user: string | null;
@@ -29,55 +31,80 @@ interface Generation {
 }
 
 interface Props {
-    connection: { connected: boolean; hint: string | null; connected_by: string | null };
+    flowUrl: string;
     products: ReferenceImage[];
     references: ReferenceImage[];
     generations: { data: Generation[]; prev: string | null; next: string | null; from: number | null; to: number | null; total: number };
     selected: Generation | null;
     aspectRatios: { value: string; label: string }[];
-    imageSizes: { value: string; label: string; cost: string }[];
     maxReferences: number;
-    canGenerate: boolean;
-    canManage: boolean;
+    canCreate: boolean;
     canDelete: boolean;
 }
 
-function ConnectCard({ canManage }: { canManage: boolean }) {
-    const form = useForm({ api_key: '' });
+interface FlowImage {
+    name: string;
+    url: string;
+    filename: string;
+}
 
-    function submit(event: FormEvent) {
-        event.preventDefault();
-        form.post('/studio/connection', { preserveScroll: true, onSuccess: () => form.reset() });
+/** What is being made in Flow right now, until the finished image comes back. */
+interface FlowSession {
+    prompt: string;
+    flowText: string;
+    aspectRatio: string;
+    referenceKeys: string[];
+    images: FlowImage[];
+    parentId: number | null;
+}
+
+const changeInstruction = (text: string) => `Edit the attached image as described here, and keep everything else the same, especially product labels and logos: ${text}`;
+
+// Kept outside the component so moving around Studio finds the same Flow tab instead of opening another.
+let flowTab: Window | null = null;
+
+function openFlow(url: string): boolean {
+    if (flowTab && !flowTab.closed) {
+        // Reuse it without reloading, so whatever is open in Flow stays where it is.
+        flowTab.focus();
+        return true;
     }
+    flowTab = window.open(url, '_blank');
+    return flowTab !== null;
+}
 
-    return (
-        <Card className="max-w-2xl p-5">
-            <h2 className="text-base font-semibold">Connect Google to generate images</h2>
-            <p className="mt-2 text-sm text-zinc-600">
-                Google Flow cannot be connected to other apps. Studio connects to the Gemini API instead, Google's official route to the Nano Banana image models.
-            </p>
-            {canManage ? (
-                <>
-                    <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm text-zinc-700">
-                        <li>Open <a className="font-medium text-brand-700 hover:underline" href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">Google AI Studio</a> and sign in with your Google account.</li>
-                        <li>Turn on billing. Images are charged to that Google account, and your Flow credits are not used.</li>
-                        <li>Create an API key and paste it below.</li>
-                    </ol>
-                    <form onSubmit={submit} className="mt-4 space-y-3">
-                        <Field label="Gemini API key" error={form.errors.api_key} hint="Kept encrypted on the server. Nobody can see it here after you save it.">
-                            <Input type="password" autoComplete="off" value={form.data.api_key} onChange={(event) => form.setData('api_key', event.target.value)} required />
-                        </Field>
-                        <Button type="submit" disabled={form.processing}>
-                            {form.processing && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Connect
-                        </Button>
-                    </form>
-                </>
-            ) : (
-                <p className="mt-4 text-sm font-medium text-zinc-800">Ask an administrator to connect Google.</p>
-            )}
-        </Card>
-    );
+/**
+ * Copies straight away, inside the click. Opening Flow takes focus from this page, and
+ * browsers refuse to write to the clipboard from a page without focus.
+ */
+function copyText(text: string): boolean {
+    const box = document.createElement('textarea');
+    box.value = text;
+    box.setAttribute('readonly', '');
+    box.style.position = 'fixed';
+    box.style.opacity = '0';
+    document.body.appendChild(box);
+    box.select();
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch {
+        copied = false;
+    }
+    box.remove();
+    if (!copied && navigator.clipboard) {
+        void navigator.clipboard.writeText(text).catch(() => {});
+    }
+    return copied;
+}
+
+function downloadImage(image: FlowImage) {
+    const link = document.createElement('a');
+    link.href = image.url;
+    link.download = image.filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
 }
 
 function ReferenceTile({ image, selected, disabled, onToggle, onRemove }: { image: ReferenceImage; selected: boolean; disabled: boolean; onToggle: () => void; onRemove?: () => void }) {
@@ -108,7 +135,6 @@ function ReferenceTile({ image, selected, disabled, onToggle, onRemove }: { imag
 function UploadButton({ kind, label }: { kind: 'product' | 'reference'; label: string }) {
     const input = useRef<HTMLInputElement>(null);
     const [busy, setBusy] = useState(false);
-    const errors = usePage<SharedProps>().props.errors as Record<string, string> | undefined;
 
     function upload(event: ChangeEvent<HTMLInputElement>) {
         const file = event.target.files?.[0];
@@ -132,95 +158,242 @@ function UploadButton({ kind, label }: { kind: 'product' | 'reference'; label: s
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
                 {label}
             </Button>
-            {errors?.file && kind === 'reference' && <p className="basis-full text-sm text-rose-700">{errors.file}</p>}
         </>
     );
 }
 
-export default function StudioIndex({ connection, products, references, generations, selected, aspectRatios, imageSizes, maxReferences, canGenerate, canManage, canDelete }: Props) {
+function FlowPanel({ session, flowUrl, ratioLabel, popupBlocked, copiedAtStart, onCancel, onOpenFlow, onSaved }: { session: FlowSession; flowUrl: string; ratioLabel: string; popupBlocked: boolean; copiedAtStart: boolean; onCancel: () => void; onOpenFlow: () => void; onSaved: () => void }) {
+    const fileInput = useRef<HTMLInputElement>(null);
+    const [copied, setCopied] = useState(copiedAtStart);
+    const [dragging, setDragging] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const errors = (usePage<SharedProps>().props.errors ?? {}) as Record<string, string>;
+    const uploadError = errors.file ?? errors.prompt ?? errors.references;
+
+    useEffect(() => setCopied(copiedAtStart), [session, copiedAtStart]);
+
+    function copy() {
+        setCopied(copyText(session.flowText));
+    }
+
+    function save(file: File | undefined) {
+        if (!file || saving) {
+            return;
+        }
+        router.post('/studio/images', {
+            file,
+            prompt: session.prompt,
+            aspect_ratio: session.aspectRatio,
+            references: session.referenceKeys,
+            parent_id: session.parentId,
+        }, {
+            forceFormData: true,
+            preserveScroll: true,
+            preserveState: true,
+            onStart: () => setSaving(true),
+            onFinish: () => setSaving(false),
+            onSuccess: onSaved,
+        });
+    }
+
+    useEffect(() => {
+        function onPaste(event: ClipboardEvent) {
+            const file = Array.from(event.clipboardData?.files ?? []).find((item) => item.type.startsWith('image/'));
+            if (file) {
+                event.preventDefault();
+                save(file);
+            }
+        }
+        window.addEventListener('paste', onPaste);
+        return () => window.removeEventListener('paste', onPaste);
+    });
+
+    function onDrop(event: DragEvent) {
+        event.preventDefault();
+        setDragging(false);
+        save(Array.from(event.dataTransfer.files).find((item) => item.type.startsWith('image/')));
+    }
+
+    function downloadAll() {
+        session.images.forEach((image, index) => window.setTimeout(() => downloadImage(image), index * 400));
+    }
+
+    return (
+        <Card className="border-2 border-brand-700 p-4">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <h2 className="text-base font-semibold">Make this image in Google Flow</h2>
+                    <p className="text-sm text-zinc-600">Flow uses the Google account signed in on this browser, and your own Flow credits.</p>
+                </div>
+                <button type="button" onClick={onCancel} aria-label="Close" className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100"><X className="h-4 w-4" /></button>
+            </div>
+
+            {popupBlocked && (
+                <p role="alert" className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                    Your browser blocked the new tab. <a className="font-medium underline" href={flowUrl} target="_blank" rel="noreferrer">Open Google Flow</a>
+                </p>
+            )}
+
+            <ol className="mt-4 space-y-4 text-sm">
+                <li>
+                    <p className="font-semibold">1. Paste the prompt in Flow</p>
+                    <p className="mt-1 whitespace-pre-line rounded-lg bg-zinc-50 p-2.5 text-zinc-700">{session.flowText}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Button type="button" variant="secondary" size="sm" onClick={copy}><Copy className="h-4 w-4" /> Copy prompt</Button>
+                        <Button type="button" variant="secondary" size="sm" onClick={onOpenFlow}><ExternalLink className="h-4 w-4" /> Go to Flow</Button>
+                        {copied && <span className="inline-flex items-center gap-1 text-emerald-700"><Check className="h-4 w-4" /> Copied</span>}
+                        {!copied && <span className="text-amber-800">Could not copy. Select the text above instead.</span>}
+                    </div>
+                </li>
+
+                {session.images.length > 0 && (
+                    <li>
+                        <p className="font-semibold">2. Add these images in Flow</p>
+                        <p className="mt-1 text-zinc-600">Download them and add them in Flow, or drag them across if the two windows are side by side.</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {session.images.map((image) => (
+                                <div key={image.url} className="w-20">
+                                    <img src={image.url} alt={image.name} title={image.name} className="aspect-square w-full rounded-md border border-zinc-200 bg-white object-contain" />
+                                    <button type="button" onClick={() => downloadImage(image)} className="mt-1 inline-flex w-full items-center justify-center gap-1 text-xs font-medium text-brand-700 hover:underline" aria-label={`Download ${image.name}`}>
+                                        <Download className="h-3 w-3" /> Download
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        {session.images.length > 1 && (
+                            <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={downloadAll}><Download className="h-4 w-4" /> Download all {session.images.length}</Button>
+                        )}
+                    </li>
+                )}
+
+                <li>
+                    <p className="font-semibold">{session.images.length > 0 ? '3' : '2'}. Generate in Flow</p>
+                    <p className="mt-1 text-zinc-600">Choose the closest size to <span className="font-medium text-zinc-800">{ratioLabel}</span>, then generate and download the image you like.</p>
+                </li>
+
+                <li>
+                    <p className="font-semibold">{session.images.length > 0 ? '4' : '3'}. Bring the image back</p>
+                    <div
+                        onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+                        onDragLeave={() => setDragging(false)}
+                        onDrop={onDrop}
+                        className={`mt-2 rounded-lg border-2 border-dashed p-5 text-center ${dragging ? 'border-brand-700 bg-brand-50' : 'border-zinc-300'}`}
+                    >
+                        <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" aria-label="Choose the image from Flow" onChange={(event) => { save(event.target.files?.[0]); event.target.value = ''; }} />
+                        <Button type="button" disabled={saving} onClick={() => fileInput.current?.click()}>
+                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                            {saving ? 'Saving...' : 'Choose image'}
+                        </Button>
+                        <p className="mt-2 text-xs text-zinc-500">Or drop it here, or copy it in Flow and press Ctrl+V here.</p>
+                    </div>
+                    {uploadError && <p role="alert" className="mt-2 text-sm text-rose-700">{uploadError}</p>}
+                </li>
+            </ol>
+        </Card>
+    );
+}
+
+export default function StudioIndex({ flowUrl, products, references, generations, selected, aspectRatios, maxReferences, canCreate, canDelete }: Props) {
     const current = selected ?? generations.data[0] ?? null;
-    const known = new Set([...products, ...references].map((image) => image.key));
+    const library = [...products, ...references];
+    const known = new Set(library.map((image) => image.key));
     const promptBox = useRef<HTMLTextAreaElement>(null);
     const changeBox = useRef<HTMLTextAreaElement>(null);
+    const panel = useRef<HTMLDivElement>(null);
 
-    const form = useForm({
-        prompt: '',
-        aspect_ratio: '4:5',
-        image_size: '1K',
-        references: [] as string[],
-        parent_id: null as number | null,
-    });
-    const change = useForm({ prompt: '', aspect_ratio: '', image_size: '', references: [] as string[], parent_id: null as number | null });
-    const [lastAction, setLastAction] = useState<'form' | 'change' | 'again' | null>(null);
-    const [againBusy, setAgainBusy] = useState(false);
-    const errors = usePage<SharedProps>().props.errors as Record<string, string> | undefined;
+    const [prompt, setPrompt] = useState('');
+    const [aspectRatio, setAspectRatio] = useState('4:5');
+    const [picked, setPicked] = useState<string[]>([]);
+    const [changeWords, setChangeWords] = useState('');
+    const [session, setSession] = useState<FlowSession | null>(null);
+    const [popupBlocked, setPopupBlocked] = useState(false);
+    const [copiedAtStart, setCopiedAtStart] = useState(false);
 
-    const busy = form.processing || change.processing || againBusy;
-    const chosen = form.data.references.filter((key) => known.has(key));
+    const chosen = picked.filter((key) => known.has(key));
     const atLimit = chosen.length >= maxReferences;
-    const cost = imageSizes.find((size) => size.value === form.data.image_size)?.cost;
 
     function toggle(key: string) {
-        form.setData('references', chosen.includes(key) ? chosen.filter((item) => item !== key) : [...chosen, key]);
+        setPicked(chosen.includes(key) ? chosen.filter((item) => item !== key) : [...chosen, key]);
     }
 
     function removeReference(image: ReferenceImage) {
         if (image.id && window.confirm(`Delete ${image.name}?`)) {
-            form.setData('references', chosen.filter((item) => item !== image.key));
+            setPicked(chosen.filter((item) => item !== image.key));
             router.delete(`/studio/references/${image.id}`, { preserveScroll: true, preserveState: true });
         }
     }
 
-    function generate(event: FormEvent) {
+    function goToFlow() {
+        setPopupBlocked(!openFlow(flowUrl));
+    }
+
+    /** Must run straight from the click, or the browser blocks the new tab. */
+    function start(next: FlowSession) {
+        setCopiedAtStart(copyText(next.flowText));
+        setSession(next);
+        goToFlow();
+        window.setTimeout(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+
+    function imagesFor(keys: string[]): FlowImage[] {
+        return keys.flatMap((key) => library.filter((image) => image.key === key));
+    }
+
+    function sendToFlow(event: FormEvent) {
         event.preventDefault();
-        setLastAction('form');
-        form.transform((data) => ({ ...data, references: chosen, parent_id: null }));
-        form.post('/studio/generate', { preserveScroll: true, preserveState: true });
+        const text = prompt.trim();
+        if (text === '') {
+            promptBox.current?.focus();
+            return;
+        }
+        start({ prompt: text, flowText: text, aspectRatio, referenceKeys: chosen, images: imagesFor(chosen), parentId: null });
+    }
+
+    function tryAgain(item: Generation) {
+        const keys = item.references.filter((key) => known.has(key));
+        if (item.parent_id && item.parent_url) {
+            start({
+                prompt: item.prompt,
+                flowText: changeInstruction(item.prompt),
+                aspectRatio: item.aspect_ratio,
+                referenceKeys: keys,
+                images: [{ name: 'Image to change', url: item.parent_url, filename: `studio-${item.parent_id}` }, ...imagesFor(keys)],
+                parentId: item.parent_id,
+            });
+            return;
+        }
+        start({ prompt: item.prompt, flowText: item.prompt, aspectRatio: item.aspect_ratio, referenceKeys: keys, images: imagesFor(keys), parentId: null });
     }
 
     function editPrompt(item: Generation) {
         // A change only makes sense against an image, so its wording goes back in the change box.
         if (item.parent_id) {
-            change.setData('prompt', item.prompt);
+            setChangeWords(item.prompt);
             changeBox.current?.focus();
             changeBox.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
-        form.setData({
-            prompt: item.prompt,
-            aspect_ratio: item.aspect_ratio,
-            image_size: item.image_size,
-            references: item.references.filter((key) => known.has(key)),
-            parent_id: null,
-        });
+        setPrompt(item.prompt);
+        setAspectRatio(item.aspect_ratio);
+        setPicked(item.references.filter((key) => known.has(key)));
         promptBox.current?.focus();
         promptBox.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
-    function regenerate(item: Generation) {
-        setLastAction('again');
-        router.post('/studio/generate', {
-            prompt: item.prompt,
-            aspect_ratio: item.aspect_ratio,
-            image_size: item.image_size,
-            references: item.references.filter((key) => known.has(key)),
-            parent_id: item.parent_id,
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-            onStart: () => setAgainBusy(true),
-            onFinish: () => setAgainBusy(false),
-        });
-    }
-
-    function applyChange(event: FormEvent, item: Generation) {
+    function changeImage(event: FormEvent, item: Generation) {
         event.preventDefault();
-        setLastAction('change');
-        change.transform((data) => ({ ...data, aspect_ratio: item.aspect_ratio, image_size: item.image_size, references: [], parent_id: item.id }));
-        change.post('/studio/generate', {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => change.reset(),
+        const text = changeWords.trim();
+        if (text === '') {
+            return;
+        }
+        const keys = item.references.filter((key) => known.has(key));
+        start({
+            prompt: text,
+            flowText: changeInstruction(text),
+            aspectRatio: item.aspect_ratio,
+            referenceKeys: keys,
+            images: [{ name: 'Image to change', url: item.url, filename: item.filename }, ...imagesFor(keys)],
+            parentId: item.id,
         });
     }
 
@@ -230,30 +403,21 @@ export default function StudioIndex({ connection, products, references, generati
         }
     }
 
+    const ratioLabel = (value: string) => aspectRatios.find((ratio) => ratio.value === value)?.label ?? value;
+
     return (
         <AppLayout>
             <Head title="Studio" />
             <PageHeader
                 title="Studio"
-                description="Generate images from your product photos and references, then refine them until they are right."
-                actions={connection.connected ? (
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-zinc-600">Google connected{connection.hint ? ` (key ending ${connection.hint})` : ''}</span>
-                        {canManage && (
-                            <Button type="button" variant="secondary" size="sm" onClick={() => { if (window.confirm('Disconnect Google? Nobody can generate images until it is connected again.')) { router.delete('/studio/connection', { preserveScroll: true }); } }}>
-                                <Unplug className="h-4 w-4" /> Disconnect
-                            </Button>
-                        )}
-                    </div>
-                ) : undefined}
+                description="Plan images here, make them in Google Flow with your own credits, and keep the results for the team."
+                actions={<Button type="button" variant="secondary" onClick={goToFlow}><ExternalLink className="h-4 w-4" /> Open Google Flow</Button>}
             />
 
-            {!connection.connected && <div className="mb-6"><ConnectCard canManage={canManage} /></div>}
-
             <div className="grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
-                {canGenerate && (
+                {canCreate && (
                     <Card className="p-4">
-                        <form onSubmit={generate} className="space-y-5">
+                        <form onSubmit={sendToFlow} className="space-y-5">
                             <section className="space-y-2">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                     <h2 className="text-sm font-semibold">Product images</h2>
@@ -281,74 +445,72 @@ export default function StudioIndex({ connection, products, references, generati
                                     <p className="text-sm text-zinc-500">Upload a photo for style, pose or scene.</p>
                                 )}
                                 <p className="text-xs text-zinc-500">{chosen.length} of {maxReferences} selected. References are optional.</p>
-                                {errors?.references && <p className="text-sm text-rose-700">{errors.references}</p>}
                             </section>
 
-                            <Field label="Describe the image" error={form.errors.prompt}>
+                            <Field label="Describe the image">
                                 <Textarea
                                     ref={promptBox}
-                                    value={form.data.prompt}
-                                    onChange={(event) => form.setData('prompt', event.target.value)}
+                                    value={prompt}
+                                    onChange={(event) => setPrompt(event.target.value)}
                                     maxLength={4000}
                                     rows={5}
+                                    required
                                     placeholder="Example: Place this bottle on a wooden table in morning sunlight, with fresh wheatgrass behind it. Keep the label exactly as it is."
                                 />
                             </Field>
 
-                            <div className="grid grid-cols-2 gap-3">
-                                <Field label="Size">
-                                    <Select value={form.data.aspect_ratio} onChange={(event) => form.setData('aspect_ratio', event.target.value)}>
-                                        {aspectRatios.map((ratio) => <option key={ratio.value} value={ratio.value}>{ratio.label}</option>)}
-                                    </Select>
-                                </Field>
-                                <Field label="Quality">
-                                    <Select value={form.data.image_size} onChange={(event) => form.setData('image_size', event.target.value)}>
-                                        {imageSizes.map((size) => <option key={size.value} value={size.value}>{size.label}</option>)}
-                                    </Select>
-                                </Field>
-                            </div>
-
-                            {errors?.generate && lastAction !== 'change' && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{errors.generate}</p>}
+                            <Field label="Size">
+                                <Select value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value)}>
+                                    {aspectRatios.map((ratio) => <option key={ratio.value} value={ratio.value}>{ratio.label}</option>)}
+                                </Select>
+                            </Field>
 
                             <div>
-                                <Button type="submit" className="w-full" disabled={busy || !connection.connected}>
-                                    {form.processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                                    {form.processing ? 'Generating, this can take a minute...' : 'Generate'}
-                                </Button>
-                                <p className="mt-1.5 text-center text-xs text-zinc-500">Google charges {cost} per image.</p>
+                                <Button type="submit" className="w-full"><Wand2 className="h-4 w-4" /> Create in Google Flow</Button>
+                                <p className="mt-1.5 text-center text-xs text-zinc-500">Copies your prompt and opens Flow in another tab.</p>
                             </div>
                         </form>
                     </Card>
                 )}
 
                 <div className="min-w-0 space-y-6">
+                    <div ref={panel} className="scroll-mt-20">
+                        {session && (
+                            <FlowPanel
+                                session={session}
+                                flowUrl={flowUrl}
+                                ratioLabel={ratioLabel(session.aspectRatio)}
+                                popupBlocked={popupBlocked}
+                                copiedAtStart={copiedAtStart}
+                                onCancel={() => setSession(null)}
+                                onOpenFlow={goToFlow}
+                                onSaved={() => { setSession(null); setChangeWords(''); }}
+                            />
+                        )}
+                    </div>
+
                     <Card className="p-4">
                         {current ? (
                             <div className="space-y-4">
-                                <div className="relative overflow-hidden rounded-lg bg-zinc-100">
+                                <div className="overflow-hidden rounded-lg bg-zinc-100">
                                     <a href={current.url} target="_blank" rel="noreferrer">
                                         <img src={current.url} alt={current.prompt} className="mx-auto max-h-[36rem] w-auto max-w-full" />
                                     </a>
-                                    {busy && (
-                                        <div className="absolute inset-0 flex items-center justify-center bg-white/70">
-                                            <span className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium shadow"><Loader2 className="h-4 w-4 animate-spin" /> Generating...</span>
-                                        </div>
-                                    )}
                                 </div>
                                 <div>
                                     <p className="whitespace-pre-line text-sm text-zinc-800">{current.prompt}</p>
                                     <p className="mt-1 text-xs text-zinc-500">
-                                        {current.aspect_ratio} · {current.image_size}{current.parent_id ? ' · Changed from an earlier image' : ''}{current.user ? ` · ${current.user}` : ''}{current.created_at ? ` · ${formatDateTime(current.created_at)}` : ''}
+                                        {current.width && current.height ? `${current.width} x ${current.height}` : current.aspect_ratio}{current.parent_id ? ' · Changed from an earlier image' : ''}{current.user ? ` · ${current.user}` : ''}{current.created_at ? ` · ${formatDateTime(current.created_at)}` : ''}
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                     <Button asChild variant="secondary" size="sm">
                                         <a href={current.download_url}><Download className="h-4 w-4" /> Download</a>
                                     </Button>
-                                    {canGenerate && (
+                                    {canCreate && (
                                         <>
-                                            <Button type="button" variant="secondary" size="sm" disabled={busy || !connection.connected} onClick={() => regenerate(current)}>
-                                                <RefreshCw className="h-4 w-4" /> Regenerate
+                                            <Button type="button" variant="secondary" size="sm" onClick={() => tryAgain(current)}>
+                                                <RefreshCw className="h-4 w-4" /> Try again in Flow
                                             </Button>
                                             <Button type="button" variant="secondary" size="sm" onClick={() => editPrompt(current)}>
                                                 <Pencil className="h-4 w-4" /> Edit prompt
@@ -361,27 +523,23 @@ export default function StudioIndex({ connection, products, references, generati
                                         </Button>
                                     )}
                                 </div>
-                                {canGenerate && (
-                                    <form onSubmit={(event) => applyChange(event, current)} className="space-y-2 border-t border-zinc-100 pt-4">
-                                        <Field label="Change this image" error={change.errors.prompt} hint="Say only what should change. Everything else stays the same as far as possible.">
-                                            <Textarea ref={changeBox} value={change.data.prompt} onChange={(event) => change.setData('prompt', event.target.value)} maxLength={4000} rows={2} placeholder="Example: Make the background lighter and move the bottle to the left." />
+                                {canCreate && (
+                                    <form onSubmit={(event) => changeImage(event, current)} className="space-y-2 border-t border-zinc-100 pt-4">
+                                        <Field label="Change this image" hint="Say only what should change. Studio prepares the wording and the image for Flow.">
+                                            <Textarea ref={changeBox} value={changeWords} onChange={(event) => setChangeWords(event.target.value)} maxLength={4000} rows={2} placeholder="Example: Make the background lighter and move the bottle to the left." />
                                         </Field>
-                                        {errors?.generate && lastAction === 'change' && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{errors.generate}</p>}
-                                        <Button type="submit" size="sm" disabled={busy || !connection.connected || change.data.prompt.trim() === ''}>
-                                            {change.processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                                            Apply change
-                                        </Button>
+                                        <Button type="submit" size="sm" disabled={changeWords.trim() === ''}><Wand2 className="h-4 w-4" /> Change in Google Flow</Button>
                                     </form>
                                 )}
                             </div>
                         ) : (
-                            <EmptyState title={busy ? 'Generating your image...' : 'No images yet'} body={busy ? 'This can take a minute.' : 'Images you generate will appear here.'} />
+                            <EmptyState title="No images yet" body="Images you bring back from Flow will appear here for the team." />
                         )}
                     </Card>
 
                     {generations.total > 0 && (
                         <section>
-                            <h2 className="mb-2 text-sm font-semibold">All generated images</h2>
+                            <h2 className="mb-2 text-sm font-semibold">All images</h2>
                             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-6">
                                 {generations.data.map((item) => (
                                     <Link key={item.id} href={`/studio?image=${item.id}`} preserveState preserveScroll aria-label={`Open image: ${item.prompt}`} title={item.prompt} className={`block overflow-hidden rounded-lg border-2 bg-zinc-100 ${current?.id === item.id ? 'border-brand-700' : 'border-transparent hover:border-zinc-300'}`}>
