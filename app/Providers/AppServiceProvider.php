@@ -57,11 +57,6 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(20)->by((string) $request->ip());
         });
 
-        // Every generated image is billed to the connected Google account.
-        RateLimiter::for('studio-generate', function (Request $request) {
-            return Limit::perMinute(10)->by((string) ($request->user()?->id ?: $request->ip()));
-        });
-
         RateLimiter::for('exports', function (Request $request) {
             return Limit::perMinute(6)->by((string) ($request->user()?->id ?: $request->ip()));
         });
