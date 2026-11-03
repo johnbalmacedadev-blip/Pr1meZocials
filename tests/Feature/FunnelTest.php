@@ -83,6 +83,38 @@ class FunnelTest extends TestCase
         $this->assertSame('640.00', FunnelOrder::query()->sole()->total);
     }
 
+    public function test_cleanse_page_sells_at_its_prices_and_carries_the_supplement_notice(): void
+    {
+        $this->makeFunnel(['slug' => 'cleanse', 'template' => 'cleanse', 'unit_price' => 500, 'compare_at_price' => 625]);
+
+        $this->get('/f/cleanse')
+            ->assertOk()
+            ->assertSee('₱500 Only', false)
+            ->assertSee('₱625.00', false)
+            ->assertSee('20% OFF', false)
+            ->assertSee('NO APPROVED THERAPEUTIC CLAIMS', false)
+            ->assertSee('"cleanse-countdown-top":{"minutes":122,"repeat":true}', false)
+            ->assertSee('funnel-assets/cleanse/img/hero.webp', false)
+            ->assertDontSee('soap', false)
+            ->assertDontSee('{{', false);
+
+        $this->postJson('/f/cleanse/order', $this->orderPayload(['quantity' => 2]))->assertCreated();
+        $this->assertSame('1000.00', FunnelOrder::query()->sole()->total);
+    }
+
+    public function test_cleanse_funnel_starts_as_a_private_draft_until_it_has_real_prices(): void
+    {
+        $this->makeBrand();
+        (require database_path('migrations/2026_11_03_120000_add_cleanse_funnel.php'))->up();
+
+        $funnel = Funnel::query()->where('slug', 'pr1me-cleanse')->sole();
+
+        $this->assertSame('draft', $funnel->status);
+        $this->assertSame('cleanse', $funnel->template);
+        $this->get('/f/pr1me-cleanse')->assertNotFound();
+        $this->postJson('/f/pr1me-cleanse/order', $this->orderPayload())->assertNotFound();
+    }
+
     public function test_coffee_page_sells_coffee_at_its_own_prices(): void
     {
         $this->makeFunnel(['slug' => 'coffee', 'template' => 'coffee-20in1', 'unit_price' => 580, 'compare_at_price' => 725]);

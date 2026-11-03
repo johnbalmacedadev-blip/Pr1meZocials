@@ -11,64 +11,15 @@ import { formatDate, formatDateTime, philippineInputValue } from '@/lib/utils';
 type Format = 'poster' | 'reel' | 'carousel' | 'image' | 'reel_poster' | 'ugc';
 
 interface Slot {
+    id: number;
     format: Format;
     title: string;
 }
 
 type SlotKey = 'morning' | 'afternoon' | 'flex' | 'evening';
 
-/** Weekly Facebook plan ("The upgraded posting schedule"). */
-const days: ({ name: string } & Record<SlotKey, Slot>)[] = [
-    {
-        name: 'Monday',
-        morning: { format: 'poster', title: 'Motivation Monday' },
-        afternoon: { format: 'reel', title: 'Product Education' },
-        flex: { format: 'reel_poster', title: 'Company News' },
-        evening: { format: 'reel', title: 'Business Opportunity' },
-    },
-    {
-        name: 'Tuesday',
-        morning: { format: 'reel', title: 'Funny Taglish' },
-        afternoon: { format: 'carousel', title: 'Benefits Carousel' },
-        flex: { format: 'reel_poster', title: 'Behind the Scenes' },
-        evening: { format: 'poster', title: 'Customer Story' },
-    },
-    {
-        name: 'Wednesday',
-        morning: { format: 'image', title: 'Relatable Meme' },
-        afternoon: { format: 'reel', title: 'Product Education' },
-        flex: { format: 'ugc', title: 'Member Content' },
-        evening: { format: 'reel', title: 'Member Journey' },
-    },
-    {
-        name: 'Thursday',
-        morning: { format: 'reel', title: 'Office Chronicles' },
-        afternoon: { format: 'poster', title: 'Product FAQ' },
-        flex: { format: 'image', title: 'Customer Photo Review' },
-        evening: { format: 'poster', title: 'How to Join' },
-    },
-    {
-        name: 'Friday',
-        morning: { format: 'reel', title: 'Trending Reel' },
-        afternoon: { format: 'poster', title: 'Product Promo' },
-        flex: { format: 'reel_poster', title: 'Member Recognition' },
-        evening: { format: 'reel', title: 'Business Invitation' },
-    },
-    {
-        name: 'Saturday',
-        morning: { format: 'image', title: 'Lifestyle Photo' },
-        afternoon: { format: 'reel', title: 'Member Testimonial' },
-        flex: { format: 'carousel', title: 'Event Coverage' },
-        evening: { format: 'poster', title: 'Bundle Offer' },
-    },
-    {
-        name: 'Sunday',
-        morning: { format: 'poster', title: 'Faith & Hope' },
-        afternoon: { format: 'reel', title: 'Community Reel' },
-        flex: { format: 'reel_poster', title: 'Ask Pr1me Z' },
-        evening: { format: 'reel', title: 'Member Success Story' },
-    },
-];
+/** Weekly Facebook plan, one row per day. The team edits the titles and formats. */
+type PlanDay = { name: string } & Record<SlotKey, Slot>;
 
 /** Platforms with their own weekly plan. Only Facebook has one so far. */
 const platforms = [
@@ -150,6 +101,8 @@ export default function PostingSchedule({
     contentOptions,
     canAssign,
     canPost = false,
+    canEditPlan = false,
+    plan,
     week,
 }: {
     entries: PlannedContent[];
@@ -157,15 +110,20 @@ export default function PostingSchedule({
     contentOptions: ContentOption[];
     canAssign: boolean;
     canPost?: boolean;
+    canEditPlan?: boolean;
+    plan: PlanDay[];
     week: WeekMeta;
 }) {
     const [adding, setAdding] = useState<{ weekday: string; slot: string; label: string; date: string } | null>(null);
+    const [editingSlot, setEditingSlot] = useState<{ slot: Slot; label: string } | null>(null);
     const dayByKey = useMemo(() => Object.fromEntries(week.days.map((day) => [day.key, day])), [week.days]);
     const cellProps = {
         entries,
         facebookPosts,
         canAssign,
         canPost,
+        canEditPlan,
+        onEditPlan: (slot: Slot, label: string) => setEditingSlot({ slot, label }),
         weekStart: week.start,
         onAssign: setAdding,
         dayByKey,
@@ -243,7 +201,7 @@ export default function PostingSchedule({
                                 </div>
                             );
                         })}
-                        {days.map((day) => {
+                        {plan.map((day) => {
                             const meta = dayByKey[day.name.toLowerCase()];
                             const current = Boolean(meta?.is_today);
                             const weekday = day.name.toLowerCase();
@@ -267,7 +225,7 @@ export default function PostingSchedule({
                     </div>
                 </div>
                 <div className="space-y-3 p-3 lg:hidden">
-                    {days.map((day) => {
+                    {plan.map((day) => {
                         const meta = dayByKey[day.name.toLowerCase()];
                         const weekday = day.name.toLowerCase();
                         const dayDate = meta?.date ?? week.start;
@@ -290,6 +248,7 @@ export default function PostingSchedule({
                 </>
                 )}
             </section>
+            <EditPlanSlotModal target={editingSlot} onClose={() => setEditingSlot(null)} />
             {canAssign && (
                 <AddContentModal
                     target={adding}
@@ -306,6 +265,8 @@ type SlotHandlers = {
     facebookPosts: FacebookSchedulePost[];
     canAssign: boolean;
     canPost: boolean;
+    canEditPlan: boolean;
+    onEditPlan: (slot: Slot, label: string) => void;
     weekStart: string;
     dayByKey: Record<string, WeekDay>;
     onAssign: (target: { weekday: string; slot: string; label: string; date: string }) => void;
@@ -321,6 +282,8 @@ function Cell({
     facebookPosts,
     canAssign,
     canPost,
+    canEditPlan,
+    onEditPlan,
     weekStart,
     dayByKey,
     onAssign,
@@ -339,7 +302,7 @@ function Cell({
 
     return (
         <div className={`border-l border-t p-3 ${tone}`}>
-            <SlotPlan template={template} weekday={weekday} dayDate={dayDate} slot={slot} entries={entries} facebookPosts={facebookPosts} canAssign={canAssign} canPost={canPost} weekStart={weekStart} dayByKey={dayByKey} onAssign={onAssign} />
+            <SlotPlan template={template} weekday={weekday} dayDate={dayDate} slot={slot} entries={entries} facebookPosts={facebookPosts} canAssign={canAssign} canPost={canPost} canEditPlan={canEditPlan} onEditPlan={onEditPlan} weekStart={weekStart} dayByKey={dayByKey} onAssign={onAssign} />
         </div>
     );
 }
@@ -354,6 +317,8 @@ function MobileSlot({
     facebookPosts,
     canAssign,
     canPost,
+    canEditPlan,
+    onEditPlan,
     weekStart,
     dayByKey,
     onAssign,
@@ -371,7 +336,7 @@ function MobileSlot({
         <div className={`rounded-lg border p-3 ${filled ? 'border-brand-700/20 bg-brand-50' : 'border-zinc-200 bg-zinc-50'}`}>
             <p className="text-xs font-semibold text-zinc-500">{label}</p>
             <div className="mt-1">
-                <SlotPlan template={template} weekday={weekday} dayDate={dayDate} slot={slot} entries={entries} facebookPosts={facebookPosts} canAssign={canAssign} canPost={canPost} weekStart={weekStart} dayByKey={dayByKey} onAssign={onAssign} />
+                <SlotPlan template={template} weekday={weekday} dayDate={dayDate} slot={slot} entries={entries} facebookPosts={facebookPosts} canAssign={canAssign} canPost={canPost} canEditPlan={canEditPlan} onEditPlan={onEditPlan} weekStart={weekStart} dayByKey={dayByKey} onAssign={onAssign} />
             </div>
         </div>
     );
@@ -386,6 +351,8 @@ function SlotPlan({
     facebookPosts,
     canAssign,
     canPost,
+    canEditPlan,
+    onEditPlan,
     weekStart,
     onAssign,
 }: {
@@ -422,6 +389,17 @@ function SlotPlan({
                     <SlotBody slot={template} filled={filled} />
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
+                    {canEditPlan && (
+                        <button
+                            type="button"
+                            aria-label={`Edit title for ${label}`}
+                            title="Edit title"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800"
+                            onClick={() => onEditPlan(template, label)}
+                        >
+                            <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                    )}
                     {canAssign && !canPost && (
                         <button
                             type="button"
@@ -603,6 +581,44 @@ function EmptyPlatform({ label }: { label: string }) {
             <p className="mt-3 font-semibold text-zinc-800">No {label} schedule yet</p>
             <p className="mt-1 text-sm text-zinc-500">The weekly {label} posting plan will appear here once it's set up.</p>
         </div>
+    );
+}
+
+function EditPlanSlotModal({ target, onClose }: { target: { slot: Slot; label: string } | null; onClose: () => void }) {
+    const form = useForm({ title: '', format: 'poster' as Format });
+
+    useEffect(() => {
+        if (target) {
+            form.setData({ title: target.slot.title, format: target.slot.format });
+            form.clearErrors();
+        }
+    }, [target]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    function save(event: FormEvent) {
+        event.preventDefault();
+        if (target) {
+            form.put(`/posting-schedule/plan/${target.slot.id}`, { preserveScroll: true, onSuccess: onClose });
+        }
+    }
+
+    return (
+        <Modal open={target !== null} onOpenChange={(open) => { if (!open) onClose(); }} title={target ? `Edit ${target.label}` : 'Edit slot'}>
+            <form onSubmit={save} className="space-y-4">
+                <Field label="Title" error={form.errors.title}>
+                    <Input value={form.data.title} maxLength={80} onChange={(event) => form.setData('title', event.target.value)} required />
+                </Field>
+                <Field label="Format" error={form.errors.format}>
+                    <Select value={form.data.format} onChange={(event) => form.setData('format', event.target.value as Format)}>
+                        {(Object.keys(FORMAT_STYLES) as Format[]).map((format) => <option key={format} value={format}>{FORMAT_STYLES[format].label}</option>)}
+                    </Select>
+                </Field>
+                <p className="text-sm text-zinc-600">This changes the slot in every week of the schedule. Posts already made stay as they are.</p>
+                <div className="flex flex-wrap gap-2">
+                    <Button type="submit" disabled={form.processing}>{form.processing ? 'Saving…' : 'Save'}</Button>
+                    <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+                </div>
+            </form>
+        </Modal>
     );
 }
 
