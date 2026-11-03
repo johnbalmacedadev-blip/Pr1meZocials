@@ -19,6 +19,7 @@ use App\Http\Controllers\PerformanceController;
 use App\Http\Controllers\PlatformVersionController;
 use App\Http\Controllers\PostingScheduleController;
 use App\Http\Controllers\SocialPostingController;
+use App\Http\Controllers\StudioController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicFunnelController;
 use App\Http\Controllers\PwaController;
@@ -136,6 +137,18 @@ Route::middleware('auth')->group(function () {
     Route::get('/campaigns/{campaign}/edit', [CampaignController::class, 'edit'])->name('campaigns.edit');
     Route::put('/campaigns/{campaign}', [CampaignController::class, 'update'])->name('campaigns.update');
     Route::delete('/campaigns/{campaign}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
+
+    Route::get('/studio', [StudioController::class, 'index'])->name('studio.index');
+    Route::post('/studio/connection', [StudioController::class, 'connect'])->name('studio.connect');
+    Route::delete('/studio/connection', [StudioController::class, 'disconnect'])->name('studio.disconnect');
+    Route::post('/studio/generate', [StudioController::class, 'generate'])->middleware('throttle:studio-generate')->name('studio.generate');
+    Route::post('/studio/references', [StudioController::class, 'storeReference'])->middleware('throttle:uploads')->name('studio.references.store');
+    Route::delete('/studio/references/{reference}', [StudioController::class, 'destroyReference'])->name('studio.references.destroy');
+    Route::get('/studio/references/{reference}/image', [StudioController::class, 'referenceImage'])->name('studio.references.image');
+    Route::get('/studio/products/{product}/image', [StudioController::class, 'productImage'])->name('studio.products.image');
+    Route::get('/studio/images/{generation}', [StudioController::class, 'image'])->name('studio.images.show');
+    Route::get('/studio/images/{generation}/download', [StudioController::class, 'download'])->name('studio.images.download');
+    Route::delete('/studio/images/{generation}', [StudioController::class, 'destroy'])->name('studio.images.destroy');
 
     Route::get('/funnels', [FunnelController::class, 'index'])->name('funnels.index');
     Route::get('/funnels/create', [FunnelController::class, 'create'])->name('funnels.create');
