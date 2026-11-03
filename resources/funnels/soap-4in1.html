@@ -120,7 +120,9 @@
                 <input type="text" name="full_name" placeholder="Full Name" aria-label="Full Name" autocomplete="name" required>
                 <input type="tel" name="phone_number" placeholder="Mobile Number" aria-label="Mobile Number" autocomplete="tel" title="Philippine mobile number, for example 09171234567" pattern="^(09|\+639|639)\d{9}$" required>
             </div>
-            <input type="text" name="address" placeholder="Address" aria-label="Address" autocomplete="street-address" required>
+            <input type="email" name="email" placeholder="Email (optional)" aria-label="Email (optional)" autocomplete="email" maxlength="150">
+            <p class="field-caption">Delivery address</p>
+            <input type="text" name="address" placeholder="Complete Address" aria-label="Complete Address" autocomplete="street-address" required>
             <div class="select-container">
                 <div class="select-field"><select name="province_id" aria-label="Select province"><option selected disabled value="">Province</option></select></div>
                 <div class="select-field"><select name="district_id" aria-label="Select city"><option selected disabled value="">City</option></select></div>

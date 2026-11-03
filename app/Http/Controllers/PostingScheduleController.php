@@ -6,6 +6,7 @@ use App\Models\ContentItem;
 use App\Models\PostingScheduleEntry;
 use App\Models\SocialPost;
 use App\Models\User;
+use App\Support\PhilippineTime;
 use App\Support\PostingScheduleSlots;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -64,24 +65,12 @@ class PostingScheduleController extends Controller
                         ->whereIn('id', $visiblePageIds ?: [0]);
                 }
             })
-            ->where(function ($query) use ($week) {
-                $query->where(function ($scheduled) use ($week) {
-                    $scheduled->where('status', 'scheduled')
-                        ->whereNotNull('scheduled_publish_at')
-                        ->whereDate('scheduled_publish_at', '>=', $week['start'])
-                        ->whereDate('scheduled_publish_at', '<=', $week['end']);
-                })->orWhere(function ($published) use ($week) {
-                    $published->where('status', 'published')
-                        ->whereNotNull('published_at')
-                        ->whereDate('published_at', '>=', $week['start'])
-                        ->whereDate('published_at', '<=', $week['end']);
-                });
-            })
-            ->orderByRaw('COALESCE(scheduled_publish_at, published_at) asc')
+            ->onCalendarBetween(PhilippineTime::startOfDayUtc($week['start']), PhilippineTime::endOfDayUtc($week['end']))
+            ->orderByRaw('COALESCE(calendar_at, scheduled_publish_at, published_at) asc')
             ->limit(200)
             ->get()
             ->map(function (SocialPost $post) {
-                $at = $post->scheduled_publish_at ?? $post->published_at;
+                $at = $post->calendarTime();
                 if (! $at) {
                     return null;
                 }
@@ -92,6 +81,8 @@ class PostingScheduleController extends Controller
                     'slot' => PostingScheduleSlots::resolveFromDateTime($at),
                     'date' => $at->toDateString(),
                     'at' => $at->toIso8601String(),
+                    'published_at' => $post->published_at?->toIso8601String(),
+                    'moved' => $post->calendar_at !== null,
                     'caption' => Str::limit((string) $post->caption, 90),
                     'media_type' => $post->media_type,
                     'media_name' => $post->media_name,
@@ -215,7 +206,7 @@ class PostingScheduleController extends Controller
      */
     private function resolveWeek(Request $request): array
     {
-        $timezone = 'Asia/Manila';
+        $timezone = PhilippineTime::ZONE;
         $today = Carbon::now($timezone)->startOfDay();
 
         try {

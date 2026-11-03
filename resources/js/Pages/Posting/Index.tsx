@@ -1,13 +1,14 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { Eye, EyeOff, Heart, ImagePlus, MessageCircle, Pencil, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
+import { CalendarClock, Eye, EyeOff, Heart, ImagePlus, MessageCircle, Pencil, RefreshCw, Share2, Trash2, Upload } from 'lucide-react';
 import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { EmojiPickerButton } from '@/Components/EmojiPicker';
 import FacebookGlyph from '@/Components/FacebookGlyph';
+import { PostCalendarDateModal, type MovablePost } from '@/Components/PostCalendarDateModal';
 import { Button, EmptyState, Field, Input, PageHeader, Select, Textarea } from '@/Components/ui';
 import AppLayout from '@/Layouts/AppLayout';
 import { uploadInChunks } from '@/lib/chunkedUpload';
 import { confirmAction } from '@/lib/confirm';
-import { formatDate, withBase } from '@/lib/utils';
+import { formatDate, formatDateTime, philippineInputValue, withBase } from '@/lib/utils';
 import type { SharedProps } from '@/types';
 
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -79,6 +80,7 @@ interface PostRow {
     engagement_rate: number | null;
     metrics_synced_at: string | null;
     published_at: string | null;
+    calendar_at: string | null;
     scheduled_publish_at: string | null;
     page: { id: number; name: string; external_id: string | null } | null;
     author: { id: number; name: string } | null;
@@ -86,8 +88,7 @@ interface PostRow {
 }
 
 function toLocalInputValue(date: Date): string {
-    const pad = (value: number) => String(value).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return philippineInputValue(date);
 }
 
 const TABS: { id: TabId; label: string }[] = [
@@ -221,6 +222,7 @@ export default function PostingIndex({
     const [togglingPageId, setTogglingPageId] = useState<number | null>(null);
     const [dragging, setDragging] = useState(false);
     const [editingPostId, setEditingPostId] = useState<number | null>(focus?.post_id ?? null);
+    const [movingPost, setMovingPost] = useState<MovablePost | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const captionRef = useRef<HTMLTextAreaElement>(null);
     const dragDepth = useRef(0);
@@ -723,7 +725,7 @@ export default function PostingIndex({
                                     </p>
                                 </Field>
                                 {postForm.data.publish_mode === 'schedule' && (
-                                    <Field label="Facebook publish time" error={postForm.errors.scheduled_publish_at}>
+                                    <Field label="Facebook publish time (Philippine time)" error={postForm.errors.scheduled_publish_at}>
                                         <input
                                             type="datetime-local"
                                             className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
@@ -1003,8 +1005,9 @@ export default function PostingIndex({
                                                     <StatusBadge status={post.status} />
                                                     <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                                                         {(post.platform === 'tiktok' ? 'TikTok' : 'Facebook')} · {post.page?.name} · {(post.media_count ?? 1) > 1 ? `${post.media_count} images` : post.media_type}
-                                                        {post.published_at ? ` · ${formatDate(post.published_at)}` : ''}
-                                                        {post.scheduled_publish_at ? ` · schedules ${formatDate(post.scheduled_publish_at)}` : ''}
+                                                        {post.published_at ? ` · ${formatDateTime(post.published_at)}` : ''}
+                                                        {post.calendar_at ? ` · on calendar ${formatDateTime(post.calendar_at)}` : ''}
+                                                        {post.scheduled_publish_at ? ` · schedules ${formatDateTime(post.scheduled_publish_at)}` : ''}
                                                     </p>
                                                 </div>
                                                 <p className="mt-1 text-xs text-zinc-500">
@@ -1036,6 +1039,17 @@ export default function PostingIndex({
                                                         onClick={() => editDraft(post)}
                                                     >
                                                         <Pencil className="h-4 w-4" />
+                                                    </button>
+                                                )}
+                                                {post.status === 'published' && (
+                                                    <button
+                                                        type="button"
+                                                        aria-label="Change calendar date"
+                                                        title="Change calendar date"
+                                                        className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
+                                                        onClick={() => setMovingPost({ id: post.id, at: post.calendar_at ?? post.published_at ?? '', published_at: post.published_at, moved: post.calendar_at !== null })}
+                                                    >
+                                                        <CalendarClock className="h-4 w-4" />
                                                     </button>
                                                 )}
                                                 {canEditCaption && editingPostId !== post.id && (
@@ -1346,6 +1360,7 @@ export default function PostingIndex({
                     )}
                 </section>
             )}
+            <PostCalendarDateModal post={movingPost} onClose={() => setMovingPost(null)} />
         </AppLayout>
     );
 }

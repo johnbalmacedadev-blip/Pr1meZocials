@@ -84,7 +84,8 @@ class FunnelController extends Controller
             ->when(in_array($status, FunnelOrder::STATUSES, true), fn ($query) => $query->where('status', $status))
             ->when($search !== '', fn ($query) => $query->where(fn ($inner) => $inner
                 ->where('full_name', 'like', "%{$search}%")
-                ->orWhere('phone', 'like', "%{$search}%")))
+                ->orWhere('phone', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%")))
             ->latest()
             ->paginate(25)
             ->withQueryString()
@@ -93,6 +94,7 @@ class FunnelController extends Controller
                 'reference' => $order->reference(),
                 'full_name' => $order->full_name,
                 'phone' => $order->phone,
+                'email' => $order->email,
                 'address' => $order->shippingAddress(),
                 'quantity' => $order->quantity,
                 'total' => FunnelPage::money($order->total),
@@ -166,7 +168,7 @@ class FunnelController extends Controller
         return response()->streamDownload(function () use ($funnel) {
             $handle = fopen('php://output', 'w');
             fputcsv($handle, [
-                'Order', 'Date', 'Status', 'Full name', 'Mobile number', 'Address', 'Barangay', 'City', 'Province',
+                'Order', 'Date', 'Status', 'Full name', 'Mobile number', 'Email', 'Address', 'Barangay', 'City', 'Province',
                 'Quantity', 'Unit price', 'Total', 'Source',
             ]);
 
@@ -178,6 +180,7 @@ class FunnelController extends Controller
                         $order->status,
                         $order->full_name,
                         $order->phone,
+                        $order->email,
                         $order->address,
                         $order->barangay,
                         $order->city,

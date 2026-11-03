@@ -42,6 +42,7 @@ class PublicFunnelController extends Controller
         $data = $request->validate([
             'full_name' => ['required', 'string', 'max:150'],
             'phone_number' => ['required', 'string', 'regex:/^(09|\+639|639)\d{9}$/'],
+            'email' => ['nullable', 'email', 'max:150'],
             'address' => ['required', 'string', 'max:255'],
             'province' => ['required', 'string', 'max:120'],
             'city' => ['required', 'string', 'max:120'],
@@ -51,6 +52,7 @@ class PublicFunnelController extends Controller
             'source.*' => ['nullable', 'string', 'max:500'],
         ], [
             'phone_number.regex' => 'Please enter a valid Philippine mobile number, for example 09171234567.',
+            'email.email' => 'Please enter a valid email address, or leave it blank.',
         ]);
 
         $phone = '09'.substr($data['phone_number'], -9);
@@ -72,6 +74,7 @@ class PublicFunnelController extends Controller
         $order = $funnel->orders()->create([
             'full_name' => $data['full_name'],
             'phone' => $phone,
+            'email' => $data['email'] ?? null,
             'address' => $data['address'],
             'province' => $data['province'],
             'city' => $data['city'],

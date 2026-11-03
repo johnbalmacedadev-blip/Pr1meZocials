@@ -21,22 +21,12 @@ class FacebookCalendarEvents
 
         return SocialPost::query()
             ->with(['account:id,name,brand_id', 'user:id,name', 'contentItem:id,title,reference_number'])
-            ->where(function ($query) use ($start, $end) {
-                $query->where(function ($scheduled) use ($start, $end) {
-                    $scheduled->where('status', 'scheduled')
-                        ->whereNotNull('scheduled_publish_at')
-                        ->whereBetween('scheduled_publish_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()]);
-                })->orWhere(function ($published) use ($start, $end) {
-                    $published->where('status', 'published')
-                        ->whereNotNull('published_at')
-                        ->whereBetween('published_at', [$start->copy()->startOfDay(), $end->copy()->endOfDay()]);
-                });
-            })
+            ->onCalendarBetween(PhilippineTime::startOfDayUtc($start->toDateString()), PhilippineTime::endOfDayUtc($end->toDateString()))
             ->when(
                 ! $user->isAdmin(),
                 fn ($query) => $query->whereIn('social_account_id', $visiblePageIds ?: [0])
             )
-            ->orderByRaw('COALESCE(scheduled_publish_at, published_at) asc')
+            ->orderByRaw('COALESCE(calendar_at, scheduled_publish_at, published_at) asc')
             ->get()
             ->map(fn (SocialPost $post) => self::present($post))
             ->values();
@@ -47,7 +37,7 @@ class FacebookCalendarEvents
      */
     public static function present(SocialPost $post): array
     {
-        $at = $post->scheduled_publish_at ?? $post->published_at;
+        $at = $post->calendarTime();
         $scheduled = $post->status === 'scheduled';
 
         return [
