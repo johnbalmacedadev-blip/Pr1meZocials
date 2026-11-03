@@ -139,7 +139,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/campaigns/{campaign}', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
 
     Route::get('/studio', [StudioController::class, 'index'])->name('studio.index');
-    Route::post('/studio/images', [StudioController::class, 'store'])->middleware('throttle:uploads')->name('studio.images.store');
+    Route::post('/studio/connection', [StudioController::class, 'connect'])->name('studio.connect');
+    Route::delete('/studio/connection', [StudioController::class, 'disconnect'])->name('studio.disconnect');
+    Route::post('/studio/generate', [StudioController::class, 'generate'])->middleware('throttle:studio-generate')->name('studio.generate');
     Route::post('/studio/references', [StudioController::class, 'storeReference'])->middleware('throttle:uploads')->name('studio.references.store');
     Route::delete('/studio/references/{reference}', [StudioController::class, 'destroyReference'])->name('studio.references.destroy');
     Route::get('/studio/references/{reference}/image', [StudioController::class, 'referenceImage'])->name('studio.references.image');
