@@ -1,5 +1,5 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { CalendarClock, ChevronLeft, ChevronRight, Clapperboard, GalleryHorizontal, Image as ImageIcon, Megaphone, Moon, Pencil, Plus, Repeat2, Sun, SunMedium, X } from 'lucide-react';
+import { Building2, CalendarClock, ChevronLeft, ChevronRight, Clapperboard, GalleryHorizontal, Image as ImageIcon, Megaphone, Moon, Pencil, Plus, Repeat2, Sun, SunMedium, X } from 'lucide-react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import FacebookGlyph from '@/Components/FacebookGlyph';
 import { PostCalendarDateModal, type MovablePost } from '@/Components/PostCalendarDateModal';
@@ -16,7 +16,7 @@ interface Slot {
     title: string;
 }
 
-type SlotKey = 'morning' | 'afternoon' | 'flex' | 'evening';
+type SlotKey = 'morning' | 'company_am' | 'afternoon' | 'company_pm' | 'flex' | 'evening' | 'company_night';
 
 /** Weekly Facebook plan, one row per day. The team edits the titles and formats. */
 type PlanDay = { name: string } & Record<SlotKey, Slot>;
@@ -83,17 +83,35 @@ interface WeekMeta {
 
 const SLOT_TIMES: Record<string, string> = {
     morning: '08:00',
+    company_am: '10:00',
     afternoon: '12:00',
+    company_pm: '14:00',
     flex: '16:00',
     evening: '19:00',
+    company_night: '21:00',
 };
 
+const COMPANY_PURPOSE = 'Company posts';
+
 const columns = [
-    { key: 'morning', label: 'Morning', time: '8:00 – 9:00 AM', purpose: 'Engage • inspire', icon: Sun },
-    { key: 'afternoon', label: 'Afternoon', time: '12:00 – 1:00 PM', purpose: 'Educate • showcase', icon: SunMedium },
-    { key: 'flex', label: 'Flex', time: '4:00 – 6:00 PM', purpose: 'Proof • company life', icon: Megaphone },
-    { key: 'evening', label: 'Evening', time: '7:00 – 8:30 PM', purpose: 'Convert • community', icon: Moon },
+    { key: 'morning', label: 'Morning', time: '8:00 – 9:00 AM', purpose: 'Engage • inspire', icon: Sun, tint: 'bg-white' },
+    { key: 'company_am', label: 'Company', time: '10:00 – 11:00 AM', purpose: COMPANY_PURPOSE, icon: Building2, tint: 'bg-sky-100' },
+    { key: 'afternoon', label: 'Afternoon', time: '12:00 – 1:00 PM', purpose: 'Educate • showcase', icon: SunMedium, tint: 'bg-white' },
+    { key: 'company_pm', label: 'Company', time: '2:00 – 3:00 PM', purpose: COMPANY_PURPOSE, icon: Building2, tint: 'bg-sky-100' },
+    { key: 'flex', label: 'Flex', time: '4:00 – 6:00 PM', purpose: 'Proof • company life', icon: Megaphone, tint: 'bg-amber-100' },
+    { key: 'evening', label: 'Evening', time: '7:00 – 8:30 PM', purpose: 'Convert • community', icon: Moon, tint: 'bg-white' },
+    { key: 'company_night', label: 'Company', time: '9:00 PM onwards', purpose: COMPANY_PURPOSE, icon: Building2, tint: 'bg-sky-100' },
 ] as const;
+
+/** Names a slot for buttons and titles, for example "Monday flex slot". */
+function slotName(slot: string): string {
+    const column = columns.find((item) => item.key === slot);
+    if (slot === 'flex' || !column) {
+        return slot === 'flex' ? 'flex slot' : slot;
+    }
+
+    return column.label === 'Company' ? `company ${column.time}` : slot;
+}
 
 export default function PostingSchedule({
     entries,
@@ -154,7 +172,7 @@ export default function PostingSchedule({
                                 ? `No ${platformLabel} posting plan yet.`
                                 : canPost
                                     ? 'Tap + to compose for that day and time. Browse weeks to see what was scheduled or posted.'
-                                    : '4 posts per day: morning, afternoon, flex, and evening'}
+                                    : '7 posts per day: morning, afternoon, flex, evening, and 3 company slots'}
                         </p>
                         <label className="mt-3 inline-flex items-center gap-2 text-sm text-zinc-600">
                             Platform
@@ -187,13 +205,13 @@ export default function PostingSchedule({
                     <EmptyPlatform label={platformLabel} />
                 ) : (
                 <>
-                <div className="hidden lg:block">
-                    <div className="grid grid-cols-[7.5rem_repeat(4,minmax(0,1fr))]">
+                <div className="hidden overflow-x-auto lg:block">
+                    <div className="grid min-w-[64rem] grid-cols-[6.5rem_repeat(7,minmax(0,1fr))]">
                         <div className="border-b border-zinc-200 bg-white px-3 py-4 text-center text-sm font-semibold text-zinc-900">Day</div>
                         {columns.map((column) => {
                             const Icon = column.icon;
                             return (
-                                <div key={column.key} className={`border-b border-l border-zinc-200 px-3 py-3 text-center text-zinc-900 ${column.key === 'flex' ? 'bg-amber-100' : 'bg-white'}`}>
+                                <div key={column.key} className={`border-b border-l border-zinc-200 px-1.5 py-3 text-center text-zinc-900 ${column.tint}`}>
                                     <Icon className="mx-auto h-4 w-4" />
                                     <p className="text-sm font-semibold uppercase">{column.label}</p>
                                     <p className="text-xs font-medium text-zinc-600">{column.time}</p>
@@ -208,17 +226,16 @@ export default function PostingSchedule({
                             const dayDate = meta?.date ?? week.start;
                             return (
                                 <div key={`${day.name}-${dayDate}`} className="contents">
-                                    <div className={`flex items-center justify-center border-t p-3 ${current ? 'border-brand-700/30 bg-[#dce6f8]' : 'border-zinc-200 bg-zinc-50'}`}>
-                                        <div className="rounded-lg bg-brand-700 px-2 py-3 text-center text-xs font-semibold uppercase tracking-wide text-white">
+                                    <div className={`flex items-center justify-center border-t p-2 ${current ? 'border-brand-700/30 bg-[#dce6f8]' : 'border-zinc-200 bg-zinc-50'}`}>
+                                        <div className="w-full rounded-lg bg-brand-700 px-1 py-3 text-center text-[11px] font-semibold uppercase text-white">
                                             {day.name}
                                             <span className="mt-1 block text-[10px] font-medium normal-case text-white/90">{meta?.label ?? dayDate}</span>
                                             {current && <span className="mt-0.5 block text-[10px] font-medium normal-case text-white/90">Today</span>}
                                         </div>
                                     </div>
-                                    <Cell template={day.morning} weekday={weekday} dayDate={dayDate} slot="morning" current={current} {...cellProps} />
-                                    <Cell template={day.afternoon} weekday={weekday} dayDate={dayDate} slot="afternoon" current={current} {...cellProps} />
-                                    <Cell template={day.flex} weekday={weekday} dayDate={dayDate} slot="flex" current={current} {...cellProps} />
-                                    <Cell template={day.evening} weekday={weekday} dayDate={dayDate} slot="evening" current={current} {...cellProps} />
+                                    {columns.map((column) => (
+                                        <Cell key={column.key} template={day[column.key]} weekday={weekday} dayDate={dayDate} slot={column.key} current={current} {...cellProps} />
+                                    ))}
                                 </div>
                             );
                         })}
@@ -236,10 +253,9 @@ export default function PostingSchedule({
                                     <span className="mt-0.5 block text-xs font-medium normal-case text-white/90">{meta?.label}{meta?.is_today ? ' · Today' : ''}</span>
                                 </h2>
                                 <div className="mt-3 space-y-3">
-                                    <MobileSlot label="Morning · 8:00 – 9:00 AM" template={day.morning} weekday={weekday} dayDate={dayDate} slot="morning" {...cellProps} />
-                                    <MobileSlot label="Afternoon · 12:00 – 1:00 PM" template={day.afternoon} weekday={weekday} dayDate={dayDate} slot="afternoon" {...cellProps} />
-                                    <MobileSlot label="Flex · 4:00 – 6:00 PM" template={day.flex} weekday={weekday} dayDate={dayDate} slot="flex" {...cellProps} />
-                                    <MobileSlot label="Evening · 7:00 – 8:30 PM" template={day.evening} weekday={weekday} dayDate={dayDate} slot="evening" {...cellProps} />
+                                    {columns.map((column) => (
+                                        <MobileSlot key={column.key} label={`${column.label} · ${column.time}`} template={day[column.key]} weekday={weekday} dayDate={dayDate} slot={column.key} {...cellProps} />
+                                    ))}
                                 </div>
                             </article>
                         );
@@ -301,7 +317,7 @@ function Cell({
         : current ? 'border-brand-700/30 bg-brand-50' : 'border-zinc-200 bg-zinc-50';
 
     return (
-        <div className={`border-l border-t p-3 ${tone}`}>
+        <div className={`border-l border-t p-2.5 ${tone}`}>
             <SlotPlan template={template} weekday={weekday} dayDate={dayDate} slot={slot} entries={entries} facebookPosts={facebookPosts} canAssign={canAssign} canPost={canPost} canEditPlan={canEditPlan} onEditPlan={onEditPlan} weekStart={weekStart} dayByKey={dayByKey} onAssign={onAssign} />
         </div>
     );
@@ -364,7 +380,7 @@ function SlotPlan({
     const planned = entries.filter((entry) => entry.weekday === weekday && entry.slot === slot && entry.post_on === dayDate);
     const posts = facebookPosts.filter((post) => post.weekday === weekday && post.slot === slot && post.date === dayDate);
     const filled = planned.length > 0 || posts.length > 0;
-    const label = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${slot === 'flex' ? 'flex slot' : slot}`;
+    const label = `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${slotName(slot)}`;
     const [moving, setMoving] = useState<MovablePost | null>(null);
 
     function openCompose() {
@@ -384,11 +400,12 @@ function SlotPlan({
 
     return (
         <>
-            <div className="flex items-start justify-between gap-2">
+            {/* Desktop columns are narrow, so the buttons sit under the title there. */}
+            <div className="flex items-start justify-between gap-2 lg:flex-col lg:items-stretch lg:gap-1.5">
                 <div className="min-w-0 flex-1">
                     <SlotBody slot={template} filled={filled} />
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1 lg:justify-end">
                     {canEditPlan && (
                         <button
                             type="button"

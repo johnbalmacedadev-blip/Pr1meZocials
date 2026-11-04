@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\ContentItem;
 use App\Models\PostingPlanSlot;
 use App\Models\PostingScheduleEntry;
+use App\Support\PostingScheduleSlots;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\BuildsOperations;
 use Tests\TestCase;
@@ -40,7 +42,7 @@ class PostingScheduleTest extends TestCase
     {
         $user = $this->makeUser('social_media_manager', $this->makeBrand('Prime Z'));
 
-        $this->assertSame(28, PostingPlanSlot::query()->count());
+        $this->assertSame(49, PostingPlanSlot::query()->count());
         $this->actingAs($user)->get('/posting-schedule')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->has('plan', 7)
             ->where('plan.0.name', 'Monday')
@@ -48,8 +50,39 @@ class PostingScheduleTest extends TestCase
             ->where('plan.0.flex.format', 'reel_poster')
             ->where('plan.1.flex.title', 'Behind the Scenes')
             ->where('plan.6.evening.title', 'Member Success Story')
+            ->where('plan.0.company_am.title', 'Company Post')
+            ->where('plan.3.company_pm.title', 'Company Post')
+            ->where('plan.6.company_night.title', 'Company Post')
             ->where('canEditPlan', true)
         );
+    }
+
+    public function test_posts_land_in_the_slot_for_their_time(): void
+    {
+        foreach ([
+            '07:00' => 'morning', '09:59' => 'morning',
+            '10:00' => 'company_am', '10:59' => 'company_am',
+            '11:00' => 'afternoon', '13:59' => 'afternoon',
+            '14:00' => 'company_pm', '14:59' => 'company_pm',
+            '15:00' => 'flex', '18:59' => 'flex',
+            '19:00' => 'evening', '20:59' => 'evening',
+            '21:00' => 'company_night', '23:59' => 'company_night', '02:00' => 'company_night', '06:59' => 'company_night',
+        ] as $time => $slot) {
+            $this->assertSame($slot, PostingScheduleSlots::resolveFromDateTime(Carbon::parse('2026-11-09 '.$time)), $time);
+        }
+    }
+
+    public function test_compose_opens_a_company_slot_at_its_time(): void
+    {
+        $user = $this->makeUser('social_media_manager', $this->makeBrand('Prime Z'));
+        $monday = now('Asia/Manila')->addWeek()->startOfWeek()->toDateString();
+
+        $this->actingAs($user)->get('/posting?'.http_build_query(['date' => $monday, 'slot' => 'company_night', 'weekday' => 'monday']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('composeDefaults.scheduled_publish_at', $monday.'T21:00')
+                ->where('composeDefaults.slot_label', fn ($label) => str_contains($label, 'Company 9 PM onwards'))
+            );
     }
 
     public function test_the_team_can_rename_a_slot_for_every_week(): void
