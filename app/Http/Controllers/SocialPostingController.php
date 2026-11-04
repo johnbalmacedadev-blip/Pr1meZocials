@@ -962,7 +962,7 @@ class SocialPostingController extends Controller
 
         $slotLabel = null;
         if ($weekday !== '' && $slot !== '') {
-            $slotLabel = ucfirst($weekday).' · '.($slot === 'flex' ? 'Flex slot' : ucfirst($slot));
+            $slotLabel = ucfirst($weekday).' · '.PostingScheduleSlots::label($slot);
             if ($scheduledAt) {
                 $slotLabel .= ' · '.Carbon::createFromFormat('Y-m-d\TH:i', $scheduledAt)->format('M j, g:i A');
             }

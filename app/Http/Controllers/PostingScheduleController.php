@@ -203,7 +203,7 @@ class PostingScheduleController extends Controller
     }
 
     /**
-     * The weekly plan, one row per day with its four slots.
+     * The weekly plan, one row per day with all its slots.
      *
      * @return list<array<string, mixed>>
      */
