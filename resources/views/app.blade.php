@@ -22,7 +22,7 @@
             <meta name="twitter:card" content="summary">
             <meta name="robots" content="noindex">
         @endif
-        <link rel="icon" type="image/png" href="{{ rtrim(config('app.url'), '/') }}/brand/favicon.png">
+        <link rel="icon" type="image/png" href="{{ rtrim(config('app.url'), '/') }}/brand/favicon.png?v=2">
         <link rel="manifest" href="{{ rtrim(config('app.url'), '/') }}/manifest.webmanifest">
         <link rel="apple-touch-icon" href="{{ rtrim(config('app.url'), '/') }}/brand/apple-touch-icon.png">
         <link rel="preconnect" href="https://fonts.bunny.net">
