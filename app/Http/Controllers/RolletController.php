@@ -6,6 +6,7 @@ use App\Models\RolletSlip;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -79,6 +80,11 @@ class RolletController extends Controller
             }
         }
 
+        $free = RolletSlip::query()->free()->pluck('id');
+        if ($free->count() === 1 && $free->first() === $picker->id) {
+            throw ValidationException::withMessages(['rollet' => 'Only your own name is left. Please ask the organizer to put a pick back so you can draw.']);
+        }
+
         throw ValidationException::withMessages(['rollet' => RolletSlip::query()->whereNull('picked_at')->exists()
             ? 'Someone is confirming the last names right now. Please try again in a few minutes.'
             : 'All names have been picked.']);
@@ -116,6 +122,7 @@ class RolletController extends Controller
         $slips = RolletSlip::query()->orderBy('id')->get();
         $labels = RolletSlip::labels();
         $donePickers = $slips->whereNotNull('picked_at')->pluck('picker_slip_id')->all();
+        $picks = $slips->whereNotNull('picked_at');
 
         return Inertia::render('Rollet/Results', [
             'results' => $slips->whereNotNull('picked_at')->sortBy('picked_at')->values()->map(fn (RolletSlip $slip) => [
@@ -126,7 +133,15 @@ class RolletController extends Controller
             ]),
             'remaining' => $slips->whereNull('picked_at')->map(fn (RolletSlip $slip) => $labels[$slip->id])->values(),
             'waiting' => $slips->reject(fn (RolletSlip $slip) => in_array($slip->id, $donePickers, true))->map(fn (RolletSlip $slip) => $labels[$slip->id])->values(),
+            'people' => $slips->map(fn (RolletSlip $slip) => [
+                'id' => $slip->id,
+                'name' => $slip->name,
+                'drawn_by' => $slip->picked_at ? $slip->picked_by : null,
+                'picked' => ($pick = $picks->firstWhere('picker_slip_id', $slip->id)) ? $labels[$pick->id] : null,
+            ])->values(),
             'total' => $slips->count(),
+            'canAdd' => $request->user()->hasPermission('rollet.create'),
+            'canEdit' => $request->user()->hasPermission('rollet.update'),
             'canRemove' => $request->user()->hasPermission('rollet.delete'),
         ]);
     }
@@ -139,6 +154,70 @@ class RolletController extends Controller
         $slip->update(['picked_by' => null, 'picked_at' => null, 'draw_token' => null, 'held_until' => null, 'picker_slip_id' => null]);
 
         return back()->with('success', RolletSlip::labels()[$slip->id].' is back in the draw.');
+    }
+
+    public function storeName(Request $request): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('rollet.create'), 403);
+
+        $slip = RolletSlip::query()->create(['name' => $this->validatedName($request)]);
+
+        return back()->with('success', $slip->name.' added to the draw.');
+    }
+
+    public function updateName(Request $request, RolletSlip $slip): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('rollet.update'), 403);
+
+        $name = $this->validatedName($request, $slip);
+
+        DB::transaction(function () use ($slip, $name) {
+            $slip->update(['name' => $name]);
+            // Their own confirmed pick is saved under their name, so it follows the rename.
+            RolletSlip::query()->where('picker_slip_id', $slip->id)->whereNotNull('picked_at')->update(['picked_by' => $name]);
+        });
+
+        return back()->with('success', 'Name changed to '.$name.'.');
+    }
+
+    /** Removes a person: anyone who drew them picks again, and any name they drew goes back. */
+    public function destroyName(Request $request, RolletSlip $slip): RedirectResponse
+    {
+        abort_unless($request->user()->hasPermission('rollet.delete'), 403);
+
+        if (RolletSlip::query()->count() <= 2) {
+            throw ValidationException::withMessages(['name_list' => 'The draw needs at least 2 names.']);
+        }
+
+        DB::transaction(function () use ($slip) {
+            RolletSlip::query()->where('picker_slip_id', $slip->id)->update([
+                'picked_by' => null, 'picked_at' => null, 'draw_token' => null, 'held_until' => null, 'picker_slip_id' => null,
+            ]);
+            $slip->delete();
+        });
+
+        return back()->with('success', $slip->name.' removed from the draw.');
+    }
+
+    private function validatedName(Request $request, ?RolletSlip $ignore = null): string
+    {
+        $data = $request->validate(['name' => ['required', 'string', 'max:80']], ['name.required' => 'Write a name.']);
+        $name = trim(preg_replace('/\s+/', ' ', $data['name']));
+
+        if ($name === '') {
+            throw ValidationException::withMessages(['name' => 'Write a name.']);
+        }
+
+        $taken = RolletSlip::query()
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->when($ignore, fn ($query) => $query->whereKeyNot($ignore->id))
+            ->exists();
+
+        if ($taken) {
+            throw ValidationException::withMessages(['name' => $name.' is already on the list.']);
+        }
+
+        return $name;
     }
 
     /**
