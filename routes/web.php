@@ -49,6 +49,8 @@ Route::get('/share/tickets/{ticket}', [TicketController::class, 'shared'])->midd
 Route::get('/rollet', [RolletController::class, 'index'])->name('rollet.index');
 Route::post('/rollet/draw', [RolletController::class, 'draw'])->middleware('throttle:rollet')->name('rollet.draw');
 Route::post('/rollet/confirm', [RolletController::class, 'confirm'])->middleware('throttle:rollet')->name('rollet.confirm');
+Route::post('/rollet/wishlist', [RolletController::class, 'saveWishlist'])->middleware('throttle:rollet')->name('rollet.wishlist.save');
+Route::post('/rollet/wishlist/view', [RolletController::class, 'viewWishlist'])->middleware('throttle:rollet')->name('rollet.wishlist.view');
 
 // Public funnel pages and their order form: customers do not sign in.
 Route::get('/f/{funnel:slug}', [PublicFunnelController::class, 'show'])->name('funnels.public');

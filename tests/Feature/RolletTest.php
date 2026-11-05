@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\RolletSlip;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Support\Facades\RateLimiter;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\BuildsOperations;
 use Tests\TestCase;
@@ -328,6 +329,112 @@ class RolletTest extends TestCase
         $response = $this->post('/rollet/draw', ['picker_id' => $this->slipId('Late Comer')]);
         $response->assertSessionHasErrors('rollet');
         $this->assertStringContainsString('Only your own name is left', session('errors')->first('rollet'));
+    }
+
+    public function test_a_wishlist_can_be_saved_and_replaced_without_the_page_showing_it(): void
+    {
+        $sam = $this->slipId('Sam');
+
+        $this->post('/rollet/wishlist', ['person_id' => $sam, 'wishlist' => '  Blue mug  '])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('rollet.index'));
+        $this->assertSame('Blue mug', RolletSlip::query()->whereKey($sam)->value('wishlist'));
+
+        $this->post('/rollet/wishlist', ['person_id' => $sam, 'wishlist' => 'Red mug']);
+        $this->assertSame('Red mug', RolletSlip::query()->whereKey($sam)->value('wishlist'));
+
+        $this->flushSession();
+        $response = $this->get('/rollet')->assertInertia(fn (Assert $page) => $page->where('wishlistShown', null)->has('everyone', 17));
+        $this->assertStringNotContainsString('Red mug', (string) $response->getContent());
+    }
+
+    public function test_a_wishlist_needs_a_name_and_some_words(): void
+    {
+        $this->post('/rollet/wishlist', ['wishlist' => 'Mug'])->assertSessionHasErrors('person_id');
+        $this->post('/rollet/wishlist', ['person_id' => 99999, 'wishlist' => 'Mug'])->assertSessionHasErrors('person_id');
+        $this->post('/rollet/wishlist', ['person_id' => $this->slipId('Sam'), 'wishlist' => '   '])->assertSessionHasErrors('wishlist');
+        $this->post('/rollet/wishlist', ['person_id' => $this->slipId('Sam'), 'wishlist' => str_repeat('a', 2001)])->assertSessionHasErrors('wishlist');
+        $this->assertSame(0, RolletSlip::query()->whereNotNull('wishlist')->count());
+    }
+
+    public function test_only_the_person_who_picked_a_name_can_view_its_wishlist(): void
+    {
+        [$sam, $neng, $mami] = [$this->slipId('Sam'), $this->slipId('Neng'), $this->slipId('Mami')];
+        RolletSlip::query()->whereKey($neng)->update(['wishlist' => 'Blue mug']);
+        $this->confirmed($neng, $sam, 'Sam');
+
+        // Not the picker, the person themselves, and a person nobody has confirmed yet.
+        foreach ([[$neng, $mami], [$neng, $neng], [$mami, $sam], [99999, $sam]] as [$person, $viewer]) {
+            $this->flushSession();
+            $this->post('/rollet/wishlist/view', ['person_id' => $person, 'viewer_id' => $viewer])->assertSessionHasErrors('wishlist_view');
+            $this->get('/rollet')->assertInertia(fn (Assert $page) => $page->where('wishlistShown', null));
+        }
+
+        $this->flushSession();
+        $this->post('/rollet/wishlist/view', ['person_id' => $neng, 'viewer_id' => $sam])->assertSessionHasNoErrors();
+        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page
+            ->where('wishlistShown.name', 'Neng')
+            ->where('wishlistShown.wishlist', 'Blue mug')
+        );
+
+        // It is not left on the page after the next load.
+        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page->where('wishlistShown', null));
+    }
+
+    public function test_a_held_pick_does_not_open_the_wishlist_until_confirmed(): void
+    {
+        [$sam, $neng] = [$this->slipId('Sam'), $this->slipId('Neng')];
+        RolletSlip::query()->whereKey($neng)->update(['wishlist' => 'Blue mug', 'draw_token' => 'x', 'held_until' => now()->addMinutes(5), 'picker_slip_id' => $sam]);
+
+        $this->post('/rollet/wishlist/view', ['person_id' => $neng, 'viewer_id' => $sam])->assertSessionHasErrors('wishlist_view');
+    }
+
+    public function test_a_picker_sees_a_kind_message_when_there_is_no_wishlist_yet(): void
+    {
+        [$sam, $neng] = [$this->slipId('Sam'), $this->slipId('Neng')];
+        $this->confirmed($neng, $sam, 'Sam');
+
+        $this->post('/rollet/wishlist/view', ['person_id' => $neng, 'viewer_id' => $sam])->assertSessionHasNoErrors();
+        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page
+            ->where('wishlistShown.name', 'Neng')
+            ->where('wishlistShown.wishlist', null)
+        );
+    }
+
+    public function test_too_many_wrong_guesses_block_viewing_even_the_right_one(): void
+    {
+        RateLimiter::clear('rollet-wishlist:127.0.0.1');
+        [$sam, $neng, $mami] = [$this->slipId('Sam'), $this->slipId('Neng'), $this->slipId('Mami')];
+        RolletSlip::query()->whereKey($neng)->update(['wishlist' => 'Blue mug']);
+        $this->confirmed($neng, $sam, 'Sam');
+
+        for ($try = 0; $try < 8; $try++) {
+            $this->post('/rollet/wishlist/view', ['person_id' => $neng, 'viewer_id' => $mami])->assertSessionHasErrors('wishlist_view');
+        }
+
+        $this->flushSession();
+        $this->post('/rollet/wishlist/view', ['person_id' => $neng, 'viewer_id' => $sam])->assertSessionHasErrors('wishlist_view');
+        $this->assertStringContainsString('Too many wrong tries', session('errors')->first('wishlist_view'));
+        RateLimiter::clear('rollet-wishlist:127.0.0.1');
+    }
+
+    public function test_right_answers_are_not_counted_as_wrong_tries(): void
+    {
+        RateLimiter::clear('rollet-wishlist:127.0.0.1');
+        [$sam, $neng] = [$this->slipId('Sam'), $this->slipId('Neng')];
+        $this->confirmed($neng, $sam, 'Sam');
+
+        for ($try = 0; $try < 12; $try++) {
+            $this->post('/rollet/wishlist/view', ['person_id' => $neng, 'viewer_id' => $sam])->assertSessionHasNoErrors();
+        }
+    }
+
+    public function test_the_organizer_can_see_wishlists_on_the_results_page(): void
+    {
+        $manager = $this->makeUser('marketing_manager', $this->makeBrand('Prime Z'));
+        RolletSlip::query()->whereKey($this->slipId('Sam'))->update(['wishlist' => 'Blue mug']);
+
+        $this->actingAs($manager)->get('/rollet-results')->assertInertia(fn (Assert $page) => $page->where('people.0.wishlist', 'Blue mug'));
     }
 
     private function secondKyle(): array
