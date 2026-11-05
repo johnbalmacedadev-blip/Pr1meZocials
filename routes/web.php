@@ -24,6 +24,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicFunnelController;
 use App\Http\Controllers\PwaController;
 use App\Http\Controllers\ResourceLinkController;
+use App\Http\Controllers\RolletController;
 use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\SavedViewController;
 use App\Http\Controllers\SearchController;
@@ -43,6 +44,11 @@ Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
 
 // Shared task links open a read-only summary without signing in.
 Route::get('/share/tickets/{ticket}', [TicketController::class, 'shared'])->middleware(['signed:relative', 'throttle:60,1'])->name('tickets.shared');
+
+// The exchange gift draw: open to everyone, linked from the login page and not from the app menu.
+Route::get('/rollet', [RolletController::class, 'index'])->name('rollet.index');
+Route::post('/rollet/draw', [RolletController::class, 'draw'])->middleware('throttle:rollet')->name('rollet.draw');
+Route::post('/rollet/confirm', [RolletController::class, 'confirm'])->middleware('throttle:rollet')->name('rollet.confirm');
 
 // Public funnel pages and their order form: customers do not sign in.
 Route::get('/f/{funnel:slug}', [PublicFunnelController::class, 'show'])->name('funnels.public');
@@ -149,6 +155,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/studio/images/{generation}', [StudioController::class, 'image'])->name('studio.images.show');
     Route::get('/studio/images/{generation}/download', [StudioController::class, 'download'])->name('studio.images.download');
     Route::delete('/studio/images/{generation}', [StudioController::class, 'destroy'])->name('studio.images.destroy');
+
+    Route::get('/rollet-results', [RolletController::class, 'results'])->name('rollet.results');
+    Route::delete('/rollet-results/{slip}', [RolletController::class, 'destroy'])->name('rollet.results.destroy');
 
     Route::get('/funnels', [FunnelController::class, 'index'])->name('funnels.index');
     Route::get('/funnels/create', [FunnelController::class, 'create'])->name('funnels.create');

@@ -94,7 +94,7 @@ class PermissionCatalogSeeder extends Seeder
             );
 
             // Soft-add newer pages once; do not overwrite custom role matrices.
-            foreach (['events', 'funnels', 'studio'] as $page) {
+            foreach (['events', 'funnels', 'studio', 'rollet'] as $page) {
                 if ($role->permissions()->where('slug', 'like', $page.'.%')->exists()) {
                     continue;
                 }

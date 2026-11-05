@@ -1,4 +1,5 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Gift } from 'lucide-react';
 import { FormEvent } from 'react';
 import { Button, Card, Field, Input } from '@/Components/ui';
 import GuestLayout from '@/Layouts/GuestLayout';
@@ -17,6 +18,9 @@ export default function Login() {
     return (
         <GuestLayout>
             <Head title="Sign in" />
+            <Link href={withBase('/rollet', basePath)} className="fixed right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800 shadow-sm hover:bg-zinc-50">
+                <Gift className="h-4 w-4 text-brand-700" /> Rollet
+            </Link>
             <Card className="p-6">
                 <h1 className="text-xl font-semibold">Sign in</h1>
                 <p className="mt-1 text-sm text-zinc-600">Use the account an administrator created for you.</p>
