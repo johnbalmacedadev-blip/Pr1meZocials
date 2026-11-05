@@ -158,6 +158,9 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/rollet-results', [RolletController::class, 'results'])->name('rollet.results');
     Route::delete('/rollet-results/{slip}', [RolletController::class, 'destroy'])->name('rollet.results.destroy');
+    Route::post('/rollet-results/names', [RolletController::class, 'storeName'])->name('rollet.names.store');
+    Route::put('/rollet-results/names/{slip}', [RolletController::class, 'updateName'])->name('rollet.names.update');
+    Route::delete('/rollet-results/names/{slip}', [RolletController::class, 'destroyName'])->name('rollet.names.destroy');
 
     Route::get('/funnels', [FunnelController::class, 'index'])->name('funnels.index');
     Route::get('/funnels/create', [FunnelController::class, 'create'])->name('funnels.create');
