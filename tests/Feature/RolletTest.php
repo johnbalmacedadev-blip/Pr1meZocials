@@ -52,9 +52,10 @@ class RolletTest extends TestCase
 
         $this->get('/rollet')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Rollet/Index')
-            ->has('names', 17)
+            ->has('names', 16)
             ->where('names.0', 'Sam')
-            ->where('names.16', 'Kyle')
+            ->where('names.9', 'Kyle')
+            ->where('names.15', 'Beloved john')
             ->where('draw', null)
             ->where('allTaken', false)
             ->missing('results')
@@ -63,9 +64,9 @@ class RolletTest extends TestCase
                 // Sam was drawn but has not picked yet, so Sam is still listed. Mami has picked.
                 $this->assertContains('Sam', $labels);
                 $this->assertNotContains('Mami', $labels);
-                $this->assertContains('Kyle 1', $labels);
-                $this->assertContains('Kyle 2', $labels);
-                $this->assertCount(16, $labels);
+                $this->assertContains('Kyle', $labels);
+                $this->assertNotContains('Kyle 1', $labels);
+                $this->assertCount(15, $labels);
 
                 return true;
             })
@@ -103,11 +104,11 @@ class RolletTest extends TestCase
                 $this->assertNotNull($slip->picked_at);
             }
 
-            $this->assertSame(17, RolletSlip::query()->whereNotNull('picked_at')->distinct()->count('picker_slip_id'));
+            $this->assertSame(16, RolletSlip::query()->whereNotNull('picked_at')->distinct()->count('picker_slip_id'));
         }
 
         $this->asNewVisitor();
-        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page->where('allTaken', true)->has('people', 0)->has('names', 17));
+        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page->where('allTaken', true)->has('people', 0)->has('names', 16));
     }
 
     public function test_with_two_names_left_the_next_person_cannot_leave_the_last_person_with_their_own(): void
@@ -203,6 +204,108 @@ class RolletTest extends TestCase
         $this->assertNull(RolletSlip::query()->whereKey($this->slipId('Liam'))->value('picker_slip_id'));
     }
 
+    private function secondKyle(): array
+    {
+        $first = $this->slipId('Kyle');
+        $second = RolletSlip::query()->create(['name' => 'Kyle'])->id;
+
+        return [$first, $second];
+    }
+
+    private function removeDuplicateKyle(): void
+    {
+        (require database_path('migrations/2026_11_06_100000_remove_duplicate_kyle_from_rollet.php'))->up();
+
+        $this->assertSame(1, RolletSlip::query()->where('name', 'Kyle')->count());
+    }
+
+    private function confirmed(int $slipId, int $pickerId, string $label): void
+    {
+        RolletSlip::query()->whereKey($slipId)->update(['picked_by' => $label, 'picked_at' => now(), 'picker_slip_id' => $pickerId]);
+    }
+
+    public function test_there_is_one_kyle_and_he_needs_no_number(): void
+    {
+        $this->assertSame(1, RolletSlip::query()->where('name', 'Kyle')->count());
+        $this->assertSame(16, RolletSlip::query()->count());
+        $this->assertSame('Kyle', RolletSlip::labels()[$this->slipId('Kyle')]);
+    }
+
+    public function test_removing_kyle_with_no_picks_keeps_the_first(): void
+    {
+        [$first, $second] = $this->secondKyle();
+
+        $this->removeDuplicateKyle();
+
+        $this->assertTrue(RolletSlip::query()->whereKey($first)->exists());
+        $this->assertFalse(RolletSlip::query()->whereKey($second)->exists());
+    }
+
+    public function test_removing_kyle_keeps_the_one_someone_already_drew(): void
+    {
+        [$first, $second] = $this->secondKyle();
+        $this->confirmed($second, $this->slipId('Sam'), 'Sam');
+
+        $this->removeDuplicateKyle();
+
+        $this->assertFalse(RolletSlip::query()->whereKey($first)->exists());
+        $this->assertSame('Sam', RolletSlip::query()->whereKey($second)->value('picked_by'));
+    }
+
+    public function test_if_two_people_drew_a_kyle_the_second_person_picks_again(): void
+    {
+        [$first, $second] = $this->secondKyle();
+        [$sam, $mami] = [$this->slipId('Sam'), $this->slipId('Mami')];
+        $this->confirmed($first, $sam, 'Sam');
+        $this->confirmed($second, $mami, 'Mami');
+
+        $this->removeDuplicateKyle();
+
+        $this->assertSame('Sam', RolletSlip::query()->whereKey($first)->value('picked_by'));
+        $this->assertFalse(RolletSlip::query()->where('picker_slip_id', $mami)->exists());
+        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page
+            ->where('people', fn ($people) => collect($people)->pluck('label')->contains('Mami') && ! collect($people)->pluck('label')->contains('Sam'))
+        );
+    }
+
+    public function test_a_pick_made_by_the_removed_kyle_becomes_kyles(): void
+    {
+        [$first, $second] = $this->secondKyle();
+        $neng = $this->slipId('Neng');
+        $this->confirmed($neng, $second, 'Kyle 2');
+
+        $this->removeDuplicateKyle();
+
+        $slip = RolletSlip::query()->find($neng);
+        $this->assertSame('Kyle', $slip->picked_by);
+        $this->assertSame($first, $slip->picker_slip_id);
+    }
+
+    public function test_if_both_kyles_picked_only_one_pick_stays_and_the_other_name_returns(): void
+    {
+        [$first, $second] = $this->secondKyle();
+        [$neng, $liam] = [$this->slipId('Neng'), $this->slipId('Liam')];
+        $this->confirmed($neng, $first, 'Kyle 1');
+        $this->confirmed($liam, $second, 'Kyle 2');
+
+        $this->removeDuplicateKyle();
+
+        $this->assertSame('Kyle', RolletSlip::query()->whereKey($neng)->value('picked_by'));
+        $this->assertNull(RolletSlip::query()->whereKey($liam)->value('picked_at'));
+    }
+
+    public function test_if_one_kyle_drew_the_other_he_picks_again_instead_of_keeping_his_own_name(): void
+    {
+        [$first, $second] = $this->secondKyle();
+        $this->confirmed($second, $first, 'Kyle 1');
+
+        $this->removeDuplicateKyle();
+
+        $kyle = RolletSlip::query()->where('name', 'Kyle')->sole();
+        $this->assertNull($kyle->picked_at);
+        $this->assertNull($kyle->picker_slip_id);
+    }
+
     public function test_results_are_for_people_with_access_and_a_name_can_be_put_back(): void
     {
         $brand = $this->makeBrand('Prime Z');
@@ -220,15 +323,15 @@ class RolletTest extends TestCase
             ->has('results', 1)
             ->where('results.0.name', RolletSlip::labels()[$slip->id])
             ->where('results.0.picked_by', 'Sam')
-            ->has('remaining', 16)
-            ->has('waiting', 16)
-            ->where('total', 17)
+            ->has('remaining', 15)
+            ->has('waiting', 15)
+            ->where('total', 16)
             ->where('canRemove', true)
         );
 
         $this->actingAs($manager)->delete('/rollet-results/'.$slip->id)->assertRedirect();
         $this->assertNull($slip->fresh()->picked_by);
         $this->assertNull($slip->fresh()->picker_slip_id);
-        $this->actingAs($manager)->get('/rollet-results')->assertInertia(fn (Assert $page) => $page->has('results', 0)->has('remaining', 17)->has('waiting', 17));
+        $this->actingAs($manager)->get('/rollet-results')->assertInertia(fn (Assert $page) => $page->has('results', 0)->has('remaining', 16)->has('waiting', 16));
     }
 }
