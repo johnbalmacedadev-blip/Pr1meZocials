@@ -62,6 +62,11 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by((string) ($request->user()?->id ?: $request->ip()));
         });
 
+        // Generous per address: everyone at the party may share one Wi-Fi connection.
+        RateLimiter::for('rollet', function (Request $request) {
+            return Limit::perMinute(40)->by((string) $request->ip());
+        });
+
         RateLimiter::for('exports', function (Request $request) {
             return Limit::perMinute(6)->by((string) ($request->user()?->id ?: $request->ip()));
         });
