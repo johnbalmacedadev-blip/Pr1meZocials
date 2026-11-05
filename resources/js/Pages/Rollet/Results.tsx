@@ -13,13 +13,13 @@ interface Result {
     picked_at: string;
 }
 
-export default function RolletResults({ results, remaining, total, canRemove }: { results: Result[]; remaining: string[]; total: number; canRemove: boolean }) {
+export default function RolletResults({ results, remaining, waiting, total, canRemove }: { results: Result[]; remaining: string[]; waiting: string[]; total: number; canRemove: boolean }) {
     const basePath = usePage<SharedProps>().props.basePath ?? '';
 
     async function remove(result: Result) {
         const ok = await confirmAction({
             title: 'Put this name back?',
-            message: `${result.picked_by}'s pick will be removed and ${result.name} can be picked again.`,
+            message: `${result.picked_by}'s pick will be removed, so they can pick again and ${result.name} can be picked again.`,
             confirmLabel: 'Put back',
             tone: 'warning',
         });
@@ -72,16 +72,25 @@ export default function RolletResults({ results, remaining, total, canRemove }: 
                 </Card>
             )}
 
-            {remaining.length > 0 && (
-                <section className="mt-6">
-                    <h2 className="text-sm font-semibold text-zinc-900">Not picked yet ({remaining.length})</h2>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                        {remaining.map((name, index) => (
-                            <span key={`${name}-${index}`} className="rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-800">{name}</span>
-                        ))}
-                    </div>
-                </section>
-            )}
+            <NameList title="Still has to pick" names={waiting} />
+            <NameList title="Names not taken yet" names={remaining} />
         </AppLayout>
+    );
+}
+
+function NameList({ title, names }: { title: string; names: string[] }) {
+    if (names.length === 0) {
+        return null;
+    }
+
+    return (
+        <section className="mt-6">
+            <h2 className="text-sm font-semibold text-zinc-900">{title} ({names.length})</h2>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+                {names.map((name) => (
+                    <span key={name} className="rounded-full bg-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-800">{name}</span>
+                ))}
+            </div>
+        </section>
     );
 }

@@ -5,16 +5,18 @@ namespace App\Http\Controllers;
 use App\Models\RolletSlip;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The exchange gift draw. The public page shows every name, always, and the server alone
- * decides what can be drawn, so nothing in the browser reveals which names are taken.
- * A drawn name is held for this browser while the person confirms it, so reloading
- * cannot draw a different name and nobody else can draw the same one.
+ * The exchange gift draw. People say who they are first, then the server draws for them,
+ * leaving out their own name. The public page shows every name, always, and nothing in
+ * the browser reveals which names are taken. A drawn name is held for this browser while
+ * the person confirms it, so reloading cannot draw a different one and nobody else can
+ * draw the same one.
  */
 class RolletController extends Controller
 {
@@ -22,13 +24,20 @@ class RolletController extends Controller
 
     private const SESSION_TOKEN = 'rollet_draw';
 
-    private const SESSION_EXCLUDE = 'rollet_exclude';
-
     public function index(Request $request): Response
     {
+        $labels = RolletSlip::labels();
+        $draw = $this->currentDraw($request);
+        $busy = RolletSlip::busyPickerIds();
+
         return Inertia::render('Rollet/Index', [
             'names' => RolletSlip::query()->orderBy('id')->pluck('name'),
-            'draw' => $this->currentDraw($request)?->name,
+            // Who still has to pick. This says nothing about which names are taken.
+            'people' => collect($labels)
+                ->reject(fn (string $label, int $id) => in_array($id, $busy, true))
+                ->map(fn (string $label, int $id) => ['id' => $id, 'label' => $label])
+                ->values(),
+            'draw' => $draw ? ['name' => $labels[$draw->id], 'picker' => $labels[$draw->picker_slip_id] ?? null] : null,
             'claimed' => $request->session()->get('rollet_claimed'),
             'allTaken' => ! RolletSlip::query()->whereNull('picked_at')->exists(),
         ]);
@@ -40,18 +49,27 @@ class RolletController extends Controller
             return redirect()->route('rollet.index');
         }
 
-        $free = RolletSlip::query()->free()->pluck('id')->shuffle();
-        $exclude = $request->session()->pull(self::SESSION_EXCLUDE);
-        if ($free->count() > 1) {
-            $free = $free->reject(fn (int $id) => $id === $exclude)->values();
+        $data = $request->validate(['picker_id' => ['required', 'integer']], ['picker_id.required' => 'Choose your name first.']);
+        $picker = RolletSlip::query()->find($data['picker_id']);
+        if (! $picker) {
+            throw ValidationException::withMessages(['rollet' => 'Choose your name from the list.']);
+        }
+
+        $label = RolletSlip::labels()[$picker->id];
+        if (RolletSlip::query()->where('picker_slip_id', $picker->id)->whereNotNull('picked_at')->exists()) {
+            throw ValidationException::withMessages(['rollet' => $label.' has already picked a name.']);
+        }
+        if (in_array($picker->id, RolletSlip::busyPickerIds(), true)) {
+            throw ValidationException::withMessages(['rollet' => $label.' is picking on another device right now. Please try again in a few minutes.']);
         }
 
         $token = Str::random(64);
-        foreach ($free as $id) {
+        foreach ($this->candidates($picker)->shuffle() as $id) {
             // Two people can reach this at once: only the update that still finds it free wins.
             $won = RolletSlip::query()->whereKey($id)->free()->update([
                 'draw_token' => $token,
                 'held_until' => now()->addMinutes(self::HOLD_MINUTES),
+                'picker_slip_id' => $picker->id,
             ]);
 
             if ($won === 1) {
@@ -68,34 +86,13 @@ class RolletController extends Controller
 
     public function confirm(Request $request): RedirectResponse
     {
-        $data = $request->validate(['picker_name' => ['required', 'string', 'max:80']], [
-            'picker_name.required' => 'Write your name.',
-        ]);
-        $picker = trim(preg_replace('/\s+/', ' ', $data['picker_name']));
-        $spoken = mb_strtolower($picker);
-
-        if ($picker === '') {
-            throw ValidationException::withMessages(['picker_name' => 'Write your name.']);
-        }
-
         $slip = $this->currentDraw($request);
         if (! $slip) {
             throw ValidationException::withMessages(['rollet' => 'Your pick has expired. Please press the button again.']);
         }
 
-        $othersFree = RolletSlip::query()->free()->whereKeyNot($slip->id)->exists();
-        if ($spoken === mb_strtolower($slip->name) && $othersFree) {
-            // Nobody buys their own gift: put it back and draw another name.
-            $slip->update(['draw_token' => null, 'held_until' => null]);
-            $request->session()->forget(self::SESSION_TOKEN);
-            $request->session()->put(self::SESSION_EXCLUDE, $slip->id);
-
-            throw ValidationException::withMessages(['rollet' => 'You picked your own name! Press the button to pick again.']);
-        }
-
-        if (RolletSlip::query()->whereNotNull('picked_at')->whereRaw('LOWER(picked_by) = ?', [$spoken])->exists()) {
-            throw ValidationException::withMessages(['picker_name' => $picker.' already has a name. If you are a different '.$picker.', add your last name.']);
-        }
+        $labels = RolletSlip::labels();
+        $picker = $labels[$slip->picker_slip_id] ?? 'Someone';
 
         $won = RolletSlip::query()->whereKey($slip->id)->where('draw_token', $slip->draw_token)->whereNull('picked_at')->update([
             'picked_by' => $picker,
@@ -109,7 +106,7 @@ class RolletController extends Controller
             throw ValidationException::withMessages(['rollet' => 'Your pick has expired. Please press the button again.']);
         }
 
-        return redirect()->route('rollet.index')->with('rollet_claimed', ['name' => $slip->name, 'picker' => $picker]);
+        return redirect()->route('rollet.index')->with('rollet_claimed', ['name' => $labels[$slip->id], 'picker' => $picker]);
     }
 
     public function results(Request $request): Response
@@ -117,28 +114,52 @@ class RolletController extends Controller
         abort_unless($request->user()->hasPermission('rollet.view'), 403);
 
         $slips = RolletSlip::query()->orderBy('id')->get();
+        $labels = RolletSlip::labels();
+        $donePickers = $slips->whereNotNull('picked_at')->pluck('picker_slip_id')->all();
 
         return Inertia::render('Rollet/Results', [
             'results' => $slips->whereNotNull('picked_at')->sortBy('picked_at')->values()->map(fn (RolletSlip $slip) => [
                 'id' => $slip->id,
-                'name' => $slip->name,
+                'name' => $labels[$slip->id],
                 'picked_by' => $slip->picked_by,
                 'picked_at' => $slip->picked_at?->toIso8601String(),
             ]),
-            'remaining' => $slips->whereNull('picked_at')->pluck('name')->values(),
+            'remaining' => $slips->whereNull('picked_at')->map(fn (RolletSlip $slip) => $labels[$slip->id])->values(),
+            'waiting' => $slips->reject(fn (RolletSlip $slip) => in_array($slip->id, $donePickers, true))->map(fn (RolletSlip $slip) => $labels[$slip->id])->values(),
             'total' => $slips->count(),
             'canRemove' => $request->user()->hasPermission('rollet.delete'),
         ]);
     }
 
-    /** Puts a name back in the draw, for a mistake or someone who picked twice. */
+    /** Puts a name back in the draw and lets its picker pick again, for a mistake. */
     public function destroy(Request $request, RolletSlip $slip): RedirectResponse
     {
         abort_unless($request->user()->hasPermission('rollet.delete'), 403);
 
-        $slip->update(['picked_by' => null, 'picked_at' => null, 'draw_token' => null, 'held_until' => null]);
+        $slip->update(['picked_by' => null, 'picked_at' => null, 'draw_token' => null, 'held_until' => null, 'picker_slip_id' => null]);
 
-        return back()->with('success', $slip->name.' is back in the draw.');
+        return back()->with('success', RolletSlip::labels()[$slip->id].' is back in the draw.');
+    }
+
+    /**
+     * Names this person may draw: never their own. When two names are left, the other person
+     * must not be left with only their own name, so this person draws that name.
+     *
+     * @return Collection<int, int>
+     */
+    private function candidates(RolletSlip $picker): Collection
+    {
+        $free = RolletSlip::query()->free()->pluck('id');
+        $othersWaiting = RolletSlip::query()
+            ->whereKeyNot($picker->id)
+            ->whereNotIn('id', RolletSlip::busyPickerIds())
+            ->pluck('id');
+
+        if ($free->count() === 2 && $othersWaiting->count() === 1 && $free->contains($othersWaiting->first())) {
+            return collect([$othersWaiting->first()]);
+        }
+
+        return $free->reject(fn (int $id) => $id === $picker->id)->values();
     }
 
     private function currentDraw(Request $request): ?RolletSlip

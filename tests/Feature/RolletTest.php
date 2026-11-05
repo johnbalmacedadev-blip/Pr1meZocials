@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\RolletSlip;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\BuildsOperations;
 use Tests\TestCase;
@@ -16,18 +17,40 @@ class RolletTest extends TestCase
     {
         parent::setUp();
         $this->seedOperations();
+        $this->withoutMiddleware(ThrottleRequests::class);
     }
 
-    private function drawnName(): ?string
+    private function slipId(string $name, int $nth = 0): int
     {
-        return RolletSlip::query()->whereNotNull('draw_token')->latest('updated_at')->value('name');
+        return RolletSlip::query()->where('name', $name)->orderBy('id')->pluck('id')[$nth];
     }
 
-    public function test_anyone_can_open_the_page_and_it_lists_every_name_without_saying_who_is_taken(): void
+    /** A person arriving on their own browser. */
+    private function asNewVisitor(): void
     {
-        RolletSlip::query()->where('name', 'Sam')->update(['picked_by' => 'Secret Person', 'picked_at' => now()]);
+        $this->flushSession();
+    }
 
-        $response = $this->get('/rollet')->assertOk()->assertInertia(fn (Assert $page) => $page
+    private function heldBy(int $pickerId): RolletSlip
+    {
+        return RolletSlip::query()->where('picker_slip_id', $pickerId)->whereNull('picked_at')->sole();
+    }
+
+    private function pick(int $pickerId): RolletSlip
+    {
+        $this->asNewVisitor();
+        $this->post('/rollet/draw', ['picker_id' => $pickerId])->assertSessionHasNoErrors();
+        $slip = $this->heldBy($pickerId);
+        $this->post('/rollet/confirm')->assertSessionHasNoErrors();
+
+        return $slip->fresh();
+    }
+
+    public function test_anyone_can_open_the_page_and_it_lists_every_name_without_saying_which_are_taken(): void
+    {
+        RolletSlip::query()->whereKey($this->slipId('Sam'))->update(['picked_by' => 'Mami', 'picked_at' => now(), 'picker_slip_id' => $this->slipId('Mami')]);
+
+        $this->get('/rollet')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Rollet/Index')
             ->has('names', 17)
             ->where('names.0', 'Sam')
@@ -35,114 +58,149 @@ class RolletTest extends TestCase
             ->where('draw', null)
             ->where('allTaken', false)
             ->missing('results')
+            ->where('people', function ($people) {
+                $labels = collect($people)->pluck('label');
+                // Sam was drawn but has not picked yet, so Sam is still listed. Mami has picked.
+                $this->assertContains('Sam', $labels);
+                $this->assertNotContains('Mami', $labels);
+                $this->assertContains('Kyle 1', $labels);
+                $this->assertContains('Kyle 2', $labels);
+                $this->assertCount(16, $labels);
+
+                return true;
+            })
         );
-
-        $this->assertStringNotContainsString('Secret Person', (string) $response->getContent());
     }
 
-    public function test_the_login_page_stays_open_to_guests_and_rollet_needs_no_sign_in_to_draw(): void
+    public function test_you_must_say_who_you_are_before_drawing(): void
     {
-        $this->get('/login')->assertOk();
-        $this->post('/rollet/draw')->assertRedirect(route('rollet.index'));
-        $this->assertSame(1, RolletSlip::query()->whereNotNull('draw_token')->count());
+        $this->post('/rollet/draw')->assertSessionHasErrors('picker_id');
+        $this->post('/rollet/draw', ['picker_id' => 99999])->assertSessionHasErrors('rollet');
+        $this->assertSame(0, RolletSlip::query()->whereNotNull('draw_token')->count());
     }
 
-    public function test_a_draw_is_held_so_reloading_or_pressing_again_keeps_the_same_name(): void
+    public function test_you_can_never_draw_your_own_name(): void
     {
-        $this->post('/rollet/draw');
-        $name = $this->drawnName();
-        $id = RolletSlip::query()->whereNotNull('draw_token')->value('id');
+        $sam = $this->slipId('Sam');
 
-        $this->post('/rollet/draw');
-        $this->assertSame($id, RolletSlip::query()->whereNotNull('draw_token')->sole()->id);
-
-        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page->where('draw', $name));
+        for ($try = 0; $try < 40; $try++) {
+            $this->asNewVisitor();
+            $this->post('/rollet/draw', ['picker_id' => $sam])->assertSessionHasNoErrors();
+            $slip = $this->heldBy($sam);
+            $this->assertNotSame($sam, $slip->id);
+            $slip->update(['draw_token' => null, 'held_until' => null, 'picker_slip_id' => null]);
+        }
     }
 
-    public function test_confirming_records_the_name_and_it_can_never_be_drawn_again_but_still_flashes(): void
+    public function test_every_draw_ends_with_everyone_having_someone_else(): void
     {
-        $picked = [];
-        for ($person = 0; $person < 17; $person++) {
-            $this->post('/rollet/draw')->assertSessionHasNoErrors();
-            $slip = RolletSlip::query()->whereNotNull('draw_token')->sole();
-            $this->assertNotContains($slip->id, $picked, 'A confirmed name was drawn again.');
-            $picked[] = $slip->id;
+        for ($round = 0; $round < 12; $round++) {
+            RolletSlip::query()->update(['picked_by' => null, 'picked_at' => null, 'draw_token' => null, 'held_until' => null, 'picker_slip_id' => null]);
 
-            $this->post('/rollet/confirm', ['picker_name' => 'Picker '.$person])->assertSessionHasNoErrors();
-            $this->assertSame('Picker '.$person, $slip->fresh()->picked_by);
-            $this->assertNotNull($slip->fresh()->picked_at);
-            $this->assertNull($slip->fresh()->draw_token);
+            foreach (RolletSlip::query()->pluck('id')->shuffle() as $pickerId) {
+                $slip = $this->pick($pickerId);
+                $this->assertNotSame($pickerId, $slip->id, 'Someone drew their own name.');
+                $this->assertNotNull($slip->picked_at);
+            }
+
+            $this->assertSame(17, RolletSlip::query()->whereNotNull('picked_at')->distinct()->count('picker_slip_id'));
         }
 
-        $this->assertCount(17, array_unique($picked));
+        $this->asNewVisitor();
+        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page->where('allTaken', true)->has('people', 0)->has('names', 17));
+    }
 
-        $this->post('/rollet/draw')->assertSessionHasErrors('rollet');
+    public function test_with_two_names_left_the_next_person_cannot_leave_the_last_person_with_their_own(): void
+    {
+        [$sam, $mami] = [$this->slipId('Sam'), $this->slipId('Mami')];
+        $others = RolletSlip::query()->whereNotIn('id', [$sam, $mami])->pluck('id')->values();
+
+        // Everyone else has picked; Sam's and Liam's names are the ones left. Mami and Sam still have to pick.
+        $liam = $this->slipId('Liam');
+        $pickers = $others->reject(fn ($id) => $id === $liam)->values()->push($liam)->values();
+        $names = $others->reject(fn ($id) => $id === $liam)->values()->push($mami)->values();
+        foreach ($names as $index => $slipId) {
+            RolletSlip::query()->whereKey($slipId)->update(['picked_by' => 'Done', 'picked_at' => now(), 'picker_slip_id' => $pickers[$index]]);
+        }
+
+        for ($try = 0; $try < 25; $try++) {
+            $this->asNewVisitor();
+            $this->post('/rollet/draw', ['picker_id' => $mami])->assertSessionHasNoErrors();
+            $slip = $this->heldBy($mami);
+            $this->assertSame($sam, $slip->id, 'Mami had to draw Sam, or Sam would be left with only Sam.');
+            $slip->update(['draw_token' => null, 'held_until' => null, 'picker_slip_id' => null]);
+        }
+    }
+
+    public function test_a_draw_is_held_so_reloading_or_submitting_again_keeps_the_same_name(): void
+    {
+        $sam = $this->slipId('Sam');
+        $this->post('/rollet/draw', ['picker_id' => $sam]);
+        $slip = $this->heldBy($sam);
+
+        $this->post('/rollet/draw', ['picker_id' => $sam]);
+        $this->assertSame($slip->id, $this->heldBy($sam)->id);
+
         $this->get('/rollet')->assertInertia(fn (Assert $page) => $page
-            ->has('names', 17)
-            ->where('allTaken', true)
-            ->where('draw', null)
+            ->where('draw.name', RolletSlip::labels()[$slip->id])
+            ->where('draw.picker', 'Sam')
         );
     }
 
-    public function test_someone_elses_held_name_cannot_be_drawn(): void
+    public function test_confirming_saves_it_and_that_name_and_person_are_done(): void
     {
-        RolletSlip::query()->where('name', '!=', 'Sam')->update(['picked_by' => 'Done', 'picked_at' => now()]);
-        RolletSlip::query()->where('name', 'Sam')->update(['draw_token' => 'someone-else', 'held_until' => now()->addMinutes(5)]);
+        $sam = $this->slipId('Sam');
+        $slip = $this->pick($sam);
 
-        $this->post('/rollet/draw')->assertSessionHasErrors('rollet');
-        $this->assertSame('someone-else', RolletSlip::query()->where('name', 'Sam')->value('draw_token'));
+        $this->assertSame('Sam', $slip->picked_by);
+        $this->assertNull($slip->draw_token);
 
-        // An abandoned hold runs out, and the name goes back in the draw.
-        RolletSlip::query()->where('name', 'Sam')->update(['held_until' => now()->subMinute()]);
-        $this->post('/rollet/draw')->assertSessionHasNoErrors();
-        $this->assertNotSame('someone-else', RolletSlip::query()->where('name', 'Sam')->value('draw_token'));
+        $this->asNewVisitor();
+        $this->post('/rollet/draw', ['picker_id' => $sam])->assertSessionHasErrors('rollet');
+
+        for ($try = 0; $try < 20; $try++) {
+            $this->asNewVisitor();
+            $picker = $this->slipId('Mami');
+            $this->post('/rollet/draw', ['picker_id' => $picker])->assertSessionHasNoErrors();
+            $held = $this->heldBy($picker);
+            $this->assertNotSame($slip->id, $held->id, 'A confirmed name was drawn again.');
+            $held->update(['draw_token' => null, 'held_until' => null, 'picker_slip_id' => null]);
+        }
     }
 
-    public function test_a_name_is_required_and_confirming_without_a_draw_saves_nothing(): void
+    public function test_someone_already_picking_on_another_device_cannot_start_again_until_it_expires(): void
     {
-        $this->post('/rollet/confirm', ['picker_name' => 'Nobody'])->assertSessionHasErrors('rollet');
+        $sam = $this->slipId('Sam');
+        $this->post('/rollet/draw', ['picker_id' => $sam])->assertSessionHasNoErrors();
+        $held = $this->heldBy($sam);
 
-        $this->post('/rollet/draw');
-        $this->post('/rollet/confirm', ['picker_name' => ''])->assertSessionHasErrors('picker_name');
-        $this->post('/rollet/confirm', ['picker_name' => '    '])->assertSessionHasErrors('picker_name');
+        $this->asNewVisitor();
+        $this->post('/rollet/draw', ['picker_id' => $sam])->assertSessionHasErrors('rollet');
+        $this->get('/rollet')->assertInertia(fn (Assert $page) => $page
+            ->where('people', fn ($people) => ! collect($people)->pluck('label')->contains('Sam'))
+        );
+
+        $held->update(['held_until' => now()->subMinute()]);
+        $this->post('/rollet/draw', ['picker_id' => $sam])->assertSessionHasNoErrors();
+    }
+
+    public function test_confirming_without_a_draw_saves_nothing(): void
+    {
+        $this->post('/rollet/confirm')->assertSessionHasErrors('rollet');
         $this->assertSame(0, RolletSlip::query()->whereNotNull('picked_at')->count());
-        $this->assertSame(1, RolletSlip::query()->whereNotNull('draw_token')->count());
     }
 
-    public function test_drawing_your_own_name_puts_it_back_and_the_next_draw_is_someone_else(): void
+    public function test_picks_typed_before_this_update_are_linked_to_their_person(): void
     {
-        $this->post('/rollet/draw');
-        $slip = RolletSlip::query()->whereNotNull('draw_token')->sole();
+        RolletSlip::query()->whereKey($this->slipId('Sam'))->update(['picked_by' => 'mami', 'picked_at' => now()]);
+        RolletSlip::query()->whereKey($this->slipId('Liam'))->update(['picked_by' => 'Someone New', 'picked_at' => now()]);
 
-        $this->post('/rollet/confirm', ['picker_name' => '  '.strtoupper($slip->name).' '])->assertSessionHasErrors('rollet');
-        $this->assertNull($slip->fresh()->picked_at);
-        $this->assertNull($slip->fresh()->draw_token);
+        $migration = require database_path('migrations/2026_11_05_110000_add_picker_to_rollet_slips.php');
+        $migration->down();
+        $migration->up();
 
-        $this->post('/rollet/draw');
-        $this->assertNotSame($slip->id, RolletSlip::query()->whereNotNull('draw_token')->sole()->id);
-    }
-
-    public function test_the_last_name_can_be_kept_even_if_it_is_your_own(): void
-    {
-        RolletSlip::query()->where('name', '!=', 'Sam')->update(['picked_by' => 'Done', 'picked_at' => now()]);
-
-        $this->post('/rollet/draw');
-        $this->post('/rollet/confirm', ['picker_name' => 'Sam'])->assertSessionHasNoErrors();
-        $this->assertSame('Sam', RolletSlip::query()->where('name', 'Sam')->value('picked_by'));
-    }
-
-    public function test_the_same_person_cannot_pick_twice(): void
-    {
-        $this->post('/rollet/draw');
-        $this->post('/rollet/confirm', ['picker_name' => 'Zed Tester'])->assertSessionHasNoErrors();
-
-        $this->post('/rollet/draw');
-        $slip = RolletSlip::query()->whereNotNull('draw_token')->sole();
-        $this->post('/rollet/confirm', ['picker_name' => 'zed tester'])->assertSessionHasErrors('picker_name');
-
-        $this->assertNull($slip->fresh()->picked_at);
-        $this->assertNotNull($slip->fresh()->draw_token);
-        $this->post('/rollet/confirm', ['picker_name' => 'Zed Tester Two'])->assertSessionHasNoErrors();
+        $this->assertSame($this->slipId('Mami'), RolletSlip::query()->whereKey($this->slipId('Sam'))->value('picker_slip_id'));
+        $this->assertNull(RolletSlip::query()->whereKey($this->slipId('Liam'))->value('picker_slip_id'));
     }
 
     public function test_results_are_for_people_with_access_and_a_name_can_be_put_back(): void
@@ -150,10 +208,8 @@ class RolletTest extends TestCase
         $brand = $this->makeBrand('Prime Z');
         $manager = $this->makeUser('marketing_manager', $brand);
         $creative = $this->makeUser('creative', $brand);
-
-        $this->post('/rollet/draw');
-        $slip = RolletSlip::query()->whereNotNull('draw_token')->sole();
-        $this->post('/rollet/confirm', ['picker_name' => 'Zed Tester']);
+        $sam = $this->slipId('Sam');
+        $slip = $this->pick($sam);
 
         $this->get('/rollet-results')->assertRedirect();
         $this->actingAs($creative)->get('/rollet-results')->assertForbidden();
@@ -162,15 +218,17 @@ class RolletTest extends TestCase
         $this->actingAs($manager)->get('/rollet-results')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Rollet/Results')
             ->has('results', 1)
-            ->where('results.0.name', $slip->name)
-            ->where('results.0.picked_by', 'Zed Tester')
+            ->where('results.0.name', RolletSlip::labels()[$slip->id])
+            ->where('results.0.picked_by', 'Sam')
             ->has('remaining', 16)
+            ->has('waiting', 16)
             ->where('total', 17)
             ->where('canRemove', true)
         );
 
         $this->actingAs($manager)->delete('/rollet-results/'.$slip->id)->assertRedirect();
         $this->assertNull($slip->fresh()->picked_by);
-        $this->actingAs($manager)->get('/rollet-results')->assertInertia(fn (Assert $page) => $page->has('results', 0)->has('remaining', 17));
+        $this->assertNull($slip->fresh()->picker_slip_id);
+        $this->actingAs($manager)->get('/rollet-results')->assertInertia(fn (Assert $page) => $page->has('results', 0)->has('remaining', 17)->has('waiting', 17));
     }
 }
