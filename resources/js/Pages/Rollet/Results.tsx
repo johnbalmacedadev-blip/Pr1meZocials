@@ -19,6 +19,7 @@ interface Person {
     name: string;
     drawn_by: string | null;
     picked: string | null;
+    wishlist: string | null;
 }
 
 interface Props {
@@ -142,6 +143,7 @@ export default function RolletResults({ results, people, remaining, waiting, tot
                                 <p className="text-xs text-zinc-500">
                                     {person.picked ? `Picked ${person.picked}` : 'Has not picked'} · {person.drawn_by ? `Drawn by ${person.drawn_by}` : 'Not drawn yet'}
                                 </p>
+                                <p className="mt-0.5 whitespace-pre-line break-words text-xs text-zinc-600">{person.wishlist ? `Wishlist: ${person.wishlist}` : 'No wishlist yet'}</p>
                             </div>
                             <div className="flex shrink-0 items-center gap-1">
                                 {canEdit && (

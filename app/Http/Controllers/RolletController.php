@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -25,6 +26,10 @@ class RolletController extends Controller
 
     private const SESSION_TOKEN = 'rollet_draw';
 
+    private const WISHLIST_WRONG_TRIES = 8;
+
+    private const WISHLIST_LOCK_SECONDS = 600;
+
     public function index(Request $request): Response
     {
         $labels = RolletSlip::labels();
@@ -38,6 +43,10 @@ class RolletController extends Controller
                 ->reject(fn (string $label, int $id) => in_array($id, $busy, true))
                 ->map(fn (string $label, int $id) => ['id' => $id, 'label' => $label])
                 ->values(),
+            // Everyone, for the wishlist screens. Wishlist text never goes to this page unless earned.
+            'everyone' => collect($labels)->map(fn (string $label, int $id) => ['id' => $id, 'label' => $label])->values(),
+            'wishlistSaved' => $request->session()->get('rollet_wishlist_saved'),
+            'wishlistShown' => $request->session()->get('rollet_wishlist_shown'),
             'draw' => $draw ? ['name' => $labels[$draw->id], 'picker' => $labels[$draw->picker_slip_id] ?? null] : null,
             'claimed' => $request->session()->get('rollet_claimed'),
             'allTaken' => ! RolletSlip::query()->whereNull('picked_at')->exists(),
@@ -115,6 +124,70 @@ class RolletController extends Controller
         return redirect()->route('rollet.index')->with('rollet_claimed', ['name' => $labels[$slip->id], 'picker' => $picker]);
     }
 
+    /** Saves this person's wishlist. Submitting again replaces it. */
+    public function saveWishlist(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'person_id' => ['required', 'integer'],
+            'wishlist' => ['required', 'string', 'max:2000'],
+        ], [
+            'person_id.required' => 'Select your name.',
+            'wishlist.required' => 'Write your wishlist.',
+            'wishlist.max' => 'Please keep your wishlist under 2000 characters.',
+        ]);
+
+        $wishlist = trim($data['wishlist']);
+        $person = RolletSlip::query()->find($data['person_id']);
+        if (! $person) {
+            throw ValidationException::withMessages(['person_id' => 'Select your name from the list.']);
+        }
+        if ($wishlist === '') {
+            throw ValidationException::withMessages(['wishlist' => 'Write your wishlist.']);
+        }
+
+        $person->update(['wishlist' => $wishlist]);
+
+        return redirect()->route('rollet.index')->with('rollet_wishlist_saved', RolletSlip::labels()[$person->id]);
+    }
+
+    /**
+     * Shows a wishlist only to the person who drew that name. Wrong tries are limited,
+     * because each one would otherwise help someone work out who drew whom.
+     */
+    public function viewWishlist(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'person_id' => ['required', 'integer'],
+            'viewer_id' => ['required', 'integer'],
+        ], [
+            'person_id.required' => 'Select whose wishlist you want to see.',
+            'viewer_id.required' => 'Select your name.',
+        ]);
+
+        $key = 'rollet-wishlist:'.$request->ip();
+        if (RateLimiter::tooManyAttempts($key, self::WISHLIST_WRONG_TRIES)) {
+            throw ValidationException::withMessages(['wishlist_view' => 'Too many wrong tries. Please wait a few minutes.']);
+        }
+
+        $person = RolletSlip::query()->find($data['person_id']);
+        $labels = RolletSlip::labels();
+        $isMatch = $person
+            && $person->picked_at !== null
+            && $person->picker_slip_id !== null
+            && $person->picker_slip_id === (int) $data['viewer_id'];
+
+        if (! $isMatch) {
+            RateLimiter::hit($key, self::WISHLIST_LOCK_SECONDS);
+
+            throw ValidationException::withMessages(['wishlist_view' => 'Sorry, you can only view the wishlist of the name you picked.']);
+        }
+
+        return redirect()->route('rollet.index')->with('rollet_wishlist_shown', [
+            'name' => $labels[$person->id],
+            'wishlist' => $person->wishlist,
+        ]);
+    }
+
     public function results(Request $request): Response
     {
         abort_unless($request->user()->hasPermission('rollet.view'), 403);
@@ -138,6 +211,7 @@ class RolletController extends Controller
                 'name' => $slip->name,
                 'drawn_by' => $slip->picked_at ? $slip->picked_by : null,
                 'picked' => ($pick = $picks->firstWhere('picker_slip_id', $slip->id)) ? $labels[$pick->id] : null,
+                'wishlist' => $slip->wishlist,
             ])->values(),
             'total' => $slips->count(),
             'canAdd' => $request->user()->hasPermission('rollet.create'),

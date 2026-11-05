@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class RolletSlip extends Model
 {
-    protected $fillable = ['name', 'picked_by', 'picked_at', 'draw_token', 'held_until', 'picker_slip_id'];
+    protected $fillable = ['name', 'picked_by', 'picked_at', 'draw_token', 'held_until', 'picker_slip_id', 'wishlist'];
 
     protected function casts(): array
     {
