@@ -1,11 +1,12 @@
-import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { Gift, Loader2 } from 'lucide-react';
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SharedProps } from '@/types';
 
 interface Props {
     names: string[];
-    draw: string | null;
+    people: { id: number; label: string }[];
+    draw: { name: string; picker: string | null } | null;
     claimed: { name: string; picker: string } | null;
     allTaken: boolean;
 }
@@ -13,7 +14,7 @@ interface Props {
 const SPIN_MS = 2600;
 
 const pageClass = 'relative flex min-h-screen flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-emerald-950 via-zinc-950 to-red-950 px-4 py-10 text-center text-white';
-const buttonClass = 'rounded-2xl bg-gradient-to-b from-amber-300 to-amber-500 font-black text-zinc-950 shadow-[0_8px_0_0_#92400e,0_20px_40px_rgba(0,0,0,0.5)] transition hover:brightness-110 active:translate-y-1.5 active:shadow-[0_2px_0_0_#92400e] disabled:opacity-60';
+const buttonClass = 'rounded-2xl bg-gradient-to-b from-amber-300 to-amber-500 font-black text-zinc-950 shadow-[0_8px_0_0_#92400e,0_20px_40px_rgba(0,0,0,0.5)] transition hover:brightness-110 active:translate-y-1.5 active:shadow-[0_2px_0_0_#92400e] disabled:opacity-50';
 
 function nextIndex(previous: number, length: number): number {
     if (length < 2) {
@@ -23,18 +24,21 @@ function nextIndex(previous: number, length: number): number {
     return next >= previous ? next + 1 : next;
 }
 
-export default function Rollet({ names, draw, claimed, allTaken }: Props) {
+export default function Rollet({ names, people, draw, claimed, allTaken }: Props) {
     const errors = (usePage<SharedProps>().props.errors ?? {}) as Record<string, string>;
     const [index, setIndex] = useState(0);
     const [tick, setTick] = useState(0);
+    const [choosing, setChoosing] = useState(false);
+    const [pickerId, setPickerId] = useState<number | null>(null);
     const [spinning, setSpinning] = useState(false);
+    const [confirming, setConfirming] = useState(false);
     const [dismissed, setDismissed] = useState(false);
     const serverDone = useRef(false);
     const spinStart = useRef(0);
-    const form = useForm({ picker_name: '' });
 
     const showClaimed = claimed !== null && !dismissed && !spinning && !draw;
-    const flashing = !spinning && !draw && !showClaimed && !allTaken;
+    const flashing = !spinning && !draw && !showClaimed && !allTaken && !choosing;
+    const drawError = errors.rollet ?? errors.picker_id;
 
     // Names keep flashing while waiting.
     useEffect(() => {
@@ -49,7 +53,7 @@ export default function Rollet({ names, draw, claimed, allTaken }: Props) {
         return () => window.clearInterval(timer);
     }, [flashing, names.length]);
 
-    // After the press the names race, then slow down until the server's answer can be shown.
+    // After submitting, the names race, then slow down until the server's answer can be shown.
     useEffect(() => {
         if (!spinning) {
             return;
@@ -69,24 +73,35 @@ export default function Rollet({ names, draw, claimed, allTaken }: Props) {
         return () => window.clearTimeout(timer);
     }, [spinning, names.length]);
 
-    function press() {
-        form.reset();
-        form.clearErrors();
+    function openChooser() {
+        setDismissed(true);
+        setPickerId(null);
+        setChoosing(true);
+    }
+
+    function startDraw() {
+        if (pickerId === null) {
+            return;
+        }
         serverDone.current = false;
         spinStart.current = performance.now();
-        setDismissed(true);
+        setChoosing(false);
         setSpinning(true);
-        router.post('/rollet/draw', {}, {
+        router.post('/rollet/draw', { picker_id: pickerId }, {
             preserveScroll: true,
             preserveState: true,
             onFinish: () => { serverDone.current = true; },
         });
     }
 
-    function confirm(event: FormEvent) {
-        event.preventDefault();
+    function confirm() {
         setDismissed(false);
-        form.post('/rollet/confirm', { preserveScroll: true, preserveState: true, onSuccess: () => form.reset() });
+        router.post('/rollet/confirm', {}, {
+            preserveScroll: true,
+            preserveState: true,
+            onStart: () => setConfirming(true),
+            onFinish: () => setConfirming(false),
+        });
     }
 
     return (
@@ -113,37 +128,50 @@ export default function Rollet({ names, draw, claimed, allTaken }: Props) {
                 </section>
             ) : draw && !spinning ? (
                 <section className="w-full max-w-lg">
-                    <p className="text-lg text-white/80">You picked</p>
-                    <p className="rollet-win my-5 break-words text-6xl font-black text-amber-300 sm:text-7xl">{draw}</p>
-                    <form onSubmit={confirm} className="mx-auto mt-8 max-w-sm space-y-3">
-                        <label className="block text-left text-sm font-semibold text-white/90" htmlFor="rollet-name">Write your name</label>
-                        <input
-                            id="rollet-name"
-                            value={form.data.picker_name}
-                            onChange={(event) => form.setData('picker_name', event.target.value)}
-                            maxLength={80}
-                            autoComplete="name"
-                            required
-                            autoFocus
-                            className="w-full rounded-xl border-2 border-white/20 bg-white px-4 py-3 text-center text-lg font-semibold text-zinc-900 outline-none focus:border-amber-400"
-                        />
-                        {form.errors.picker_name && <p role="alert" className="rounded-lg bg-red-100 p-2 text-sm font-medium text-red-900">{form.errors.picker_name}</p>}
-                        <button type="submit" disabled={form.processing} className={`${buttonClass} flex w-full items-center justify-center gap-2 py-3.5 text-xl`}>
-                            {form.processing && <Loader2 className="h-5 w-5 animate-spin" />}
-                            Confirm
-                        </button>
-                    </form>
+                    <p className="text-lg text-white/80">{draw.picker ? `${draw.picker}, you picked` : 'You picked'}</p>
+                    <p className="rollet-win my-5 break-words text-6xl font-black text-amber-300 sm:text-7xl">{draw.name}</p>
+                    <button type="button" onClick={confirm} disabled={confirming} className={`${buttonClass} mx-auto mt-6 flex w-full max-w-sm items-center justify-center gap-2 py-3.5 text-xl`}>
+                        {confirming && <Loader2 className="h-5 w-5 animate-spin" />}
+                        Confirm
+                    </button>
+                </section>
+            ) : choosing ? (
+                <section className="w-full max-w-2xl">
+                    <h1 className="text-3xl font-black sm:text-4xl">Who are you?</h1>
+                    <p className="mt-2 text-white/80">Select your name so you won't pick yourself.</p>
+                    {people.length > 0 ? (
+                        <div role="radiogroup" aria-label="Who are you?" className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                            {people.map((person) => (
+                                <button
+                                    key={person.id}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={pickerId === person.id}
+                                    onClick={() => setPickerId(person.id)}
+                                    className={`min-h-12 rounded-xl border-2 px-3 py-2 font-bold transition ${pickerId === person.id ? 'border-amber-300 bg-amber-300 text-zinc-950' : 'border-white/25 bg-white/10 text-white hover:bg-white/20'}`}
+                                >
+                                    {person.label}
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="mt-6 rounded-lg bg-white/10 p-3 text-white/90">Everyone left is already picking. Please try again in a few minutes.</p>
+                    )}
+                    <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+                        <button type="button" onClick={() => setChoosing(false)} className="rounded-xl px-4 py-3 font-semibold text-white/80 hover:text-white">Back</button>
+                        <button type="button" onClick={startDraw} disabled={pickerId === null} className={`${buttonClass} px-10 py-3.5 text-xl`}>Submit</button>
+                    </div>
                 </section>
             ) : (
                 <section className="w-full max-w-2xl">
                     <p key={tick} aria-live="off" className={`rollet-flash flex min-h-[8rem] items-center justify-center break-words text-6xl font-black sm:text-8xl ${spinning ? 'text-amber-300' : 'text-white/90'}`}>
                         {names[index]}
                     </p>
-                    {errors.rollet && !spinning && <p role="alert" className="mx-auto mt-2 max-w-md rounded-lg bg-red-100 p-3 text-sm font-medium text-red-900">{errors.rollet}</p>}
+                    {drawError && !spinning && <p role="alert" className="mx-auto mt-2 max-w-md rounded-lg bg-red-100 p-3 text-sm font-medium text-red-900">{drawError}</p>}
                     {allTaken ? (
                         <p className="mt-8 text-xl font-semibold text-amber-300">All names have been picked. Merry Christmas!</p>
                     ) : (
-                        <button type="button" onClick={press} disabled={spinning} className={`${buttonClass} mt-10 px-10 py-6 text-3xl sm:text-4xl`}>
+                        <button type="button" onClick={openChooser} disabled={spinning} className={`${buttonClass} mt-10 px-10 py-6 text-3xl sm:text-4xl`}>
                             PINDUTIN MO NA!
                         </button>
                     )}
