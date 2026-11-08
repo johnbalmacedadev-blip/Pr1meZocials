@@ -11,9 +11,10 @@ class BrandGuidelinesTest extends TestCase
 
     private const FILES = [
         'index.html',
-        'prime-z-brand-guidelines.png',
-        'prime-z-brand-guidelines-1600.webp',
-        'prime-z-brand-guidelines-3200.webp',
+        'prime-z-brand-guidelines.jpg',
+        'prime-z-brand-guidelines-1200.webp',
+        'prime-z-brand-guidelines-2179.webp',
+        'prime-z-logo.png',
         'prime-z-logo-white.png',
         'prime-z-footer-ribbon.png',
         'prime-z-footer-ribbon-supplement.png',
@@ -27,7 +28,7 @@ class BrandGuidelinesTest extends TestCase
         }
 
         $html = (string) file_get_contents($dir.'/index.html');
-        foreach (['prime-z-brand-guidelines.png', 'prime-z-logo-white.png', 'prime-z-footer-ribbon.png', 'prime-z-footer-ribbon-supplement.png'] as $image) {
+        foreach (['prime-z-brand-guidelines.jpg', 'prime-z-logo.png', 'prime-z-logo-white.png', 'prime-z-footer-ribbon.png', 'prime-z-footer-ribbon-supplement.png'] as $image) {
             $this->assertStringContainsString('href="'.$image.'" download="'.$image.'"', $html, $image.' has no download button.');
         }
     }
